@@ -2536,6 +2536,11 @@ html #view-dividen#view-dividen#view-dividen #dv-list .txn-row.v2{border-left:4p
       <div style="font-size:12px; opacity:.85; margin-top:2px;" id="ap-total-sub">-</div>
       <div style="font-size:12px; opacity:.85; margin-top:6px; line-height:1.5;" id="ap-total-cmp"></div>
     </div>
+    <div class="card" id="ap-aset-card">
+      <h3><span class="dot"></span>Pengeluaran Aset &amp; Stok</h3>
+      <div class="meta" style="margin-bottom:10px;">Uang yang dipakai membeli aset dan stok pada periode ini, dipisah per jenis. Tidak termasuk pemakaian stok.</div>
+      <div id="ap-aset-rows"></div>
+    </div>
     <div class="card" id="ap-top-card" style="display:none;"><div id="ap-top"></div></div>
     <div class="card"><h3><span class="dot"></span><span id="ap-dim-title">Pengeluaran per Jenis</span></h3>
       <div class="meta" style="margin-bottom:10px;">Ketuk salah satu untuk melihat transaksi di dalamnya.</div>
@@ -8497,6 +8502,36 @@ function apCollect(from, to){
   });
   return rows;
 }
+/* Kartu "Pengeluaran Aset & Stok": uang keluar untuk beli inventaris, aset biologis, stok (belanja item), dan investasi pada periode terpilih.
+   Sumber angka sama dengan Laporan (akunTotals), jadi konsisten dengan PDF. */
+function apRenderAset(r){
+  var box = document.getElementById('ap-aset-rows'); if(!box) return;
+  var cur = akunTotals(r.from, r.to), prv = r.prev ? akunTotals(r.prev.from, r.prev.to) : null;
+  var defs = [
+    ['1-200', L('Inventaris','Inventory')],
+    ['1-300', L('Aset Biologis','Biological Assets')],
+    ['1-400', L('Stok / Bahan Habis Pakai (belanja item)','Stock / Consumables (item purchases)')],
+    ['1-500', L('Investasi','Investments')]
+  ];
+  function delta(v, pv){
+    if(pv===null || v===pv) return '';
+    return '<div style="font-size:11.5px; color:var(--text-2); margin-top:1px;">'+(v>pv?'▲ ':'▼ ')+fmt(Math.abs(v-pv))+' '+L('vs periode lalu','vs previous period')+'</div>';
+  }
+  function row(label, v, pv, bold){
+    return '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:10px 0; border-bottom:1px solid var(--line, rgba(127,127,127,.18));'+(bold?' font-weight:800;':'')+'">'+
+      '<div style="min-width:0;">'+escapeHtml(label)+'</div>'+
+      '<div style="text-align:right; flex-shrink:0;"><div class="mono" style="font-weight:'+(bold?'800':'700')+';">'+fmt(v)+'</div>'+delta(v, pv)+'</div></div>';
+  }
+  var tot = 0, ptot = prv ? 0 : null, h = '';
+  defs.forEach(function(d){
+    var v = Math.round(cur.map[d[0]]||0), pv = prv ? Math.round(prv.map[d[0]]||0) : null;
+    tot += v; if(pv!==null) ptot += pv;
+    h += row(d[1], v, pv, false);
+  });
+  h += row(L('Total aset & stok','Total assets & stock'), tot, ptot, true);
+  if(cur.pakai>0) h += '<div class="meta" style="margin-top:10px;">'+L('Pemakaian stok periode ini (nilai barang yang dikeluarkan, bukan uang keluar): ','Stock used this period (value of items taken out, not cash out): ')+'<b>'+fmt(Math.round(cur.pakai))+'</b></div>';
+  box.innerHTML = h;
+}
 function renderAnalisisPengeluaran(){
   var r = apRange(), dim = APX.dim;
   document.getElementById('ap-custom-wrap').style.display = r.mode==='custom' ? '' : 'none';
@@ -8533,6 +8568,8 @@ function renderAnalisisPengeluaran(){
       : (sel>0 ? '▲ ' : '▼ ') + L(fmt(Math.abs(sel))+' ('+pctD+'%) '+(sel>0?'lebih boros':'lebih hemat')+' dibanding periode sebelumnya ('+fmt(prevTotal)+')',
                                    fmt(Math.abs(sel))+' ('+pctD+'%) '+(sel>0?'more':'less')+' than the previous period ('+fmt(prevTotal)+')');
   }
+
+  try{ apRenderAset(r); }catch(eAs){ console.error('Kartu aset & stok gagal', eAs); }
 
   // kelompok
   var grp = {};
@@ -16085,6 +16122,58 @@ function toggleRecurring(id){
   toast(r.aktif ? 'Diaktifkan lagi' : 'Dijeda');
   renderRecurringList();
 }
+function editRecurring(id){
+  var r = DATA.recurring.find(function(x){ return x.id===id; });
+  if(!r) return;
+  var isInv = r.tipe==='investasi';
+  function opt(list, cur){
+    var l = (list||[]).slice(); if(cur && l.indexOf(cur)===-1) l.unshift(cur);
+    return l.map(function(v){ return '<option value="'+escapeHtml(v)+'"'+(v===cur?' selected':'')+'>'+escapeHtml(v)+'</option>'; }).join('');
+  }
+  var satuanOpts = [['hari','Hari'],['minggu','Minggu'],['bulan','Bulan'],['tahun','Tahun']].map(function(x){ return '<option value="'+x[0]+'"'+((r.satuan||'bulan')===x[0]?' selected':'')+'>'+x[1]+'</option>'; }).join('');
+  var tipeTxt = isInv ? 'Investasi / SIP' : (r.tipe==='tagihan' ? 'Tagihan' : 'Pemasukan');
+  var h = '<div style="font-weight:800; font-size:17px; margin-bottom:4px;">'+escapeHtml(L('Edit Transaksi Berulang','Edit Recurring Transaction'))+'</div>'+
+    '<div style="font-size:12px; color:var(--text-2); margin-bottom:12px;">'+escapeHtml(L('Tipe: ','Type: '))+escapeHtml(L(tipeTxt, isInv?'Investment / SIP':(r.tipe==='tagihan'?'Bill':'Income')))+'</div>';
+  if(isInv){
+    h += '<div class="field"><label>Instrumen Investasi</label><select id="rce-instrumen">'+opt(INSTRUMEN_INVESTASI, r.instrumen)+'</select></div>'+
+      '<div class="field"><label>Platform/Sekuritas</label><select id="rce-platform">'+opt(platformInvestasiList(), r.platform)+'</select></div>'+
+      '<div class="field"><label>Kode/Nama Produk</label><input type="text" id="rce-kode" maxlength="60" value="'+escapeHtml(r.kode||'')+'"></div>';
+  } else {
+    h += '<div class="field"><label>'+(r.tipe==='tagihan'?'Jenis Tagihan':'Sumber Pemasukan')+'</label><select id="rce-label">'+opt(r.tipe==='tagihan'?DATA.jenisTagihan:DATA.sumberPemasukan, r.label)+'</select></div>';
+  }
+  h += '<div class="field"><label>Rekening/Metode</label><select id="rce-metode"></select></div>'+
+    '<div class="field"><label>Jumlah (Rp)</label><input type="text" class="money-input" id="rce-jumlah" inputmode="numeric" value="'+formatMoneyValue(r.jumlah||0)+'"></div>'+
+    '<div class="field"><label>'+escapeHtml(L('Jatuh tempo berikutnya','Next due date'))+'</label><input type="date" id="rce-tanggal" value="'+escapeHtml(r.nextDue||'')+'"></div>'+
+    '<div class="field"><label>Ulangi Tiap</label><div style="display:flex; gap:10px;"><input type="number" id="rce-interval" min="1" value="'+(r.intervalBulan||1)+'" inputmode="numeric" style="flex:1; min-width:0;"><select id="rce-satuan" style="flex:1.4; min-width:0;">'+satuanOpts+'</select></div></div>'+
+    '<div class="field"><label>Keterangan (opsional)</label><input type="text" id="rce-ket" maxlength="100" value="'+escapeHtml(r.ket||'')+'"></div>'+
+    '<div style="display:flex; gap:10px; margin-top:14px;"><button class="btn ghost" id="rce-batal" style="flex:1; margin-top:0;">'+escapeHtml(L('Batal','Cancel'))+'</button><button class="btn" id="rce-simpan" style="flex:1.3; margin-top:0;">'+escapeHtml(L('Simpan Perubahan','Save Changes'))+'</button></div>';
+  var ov = rekModal(h);
+  var metList = isInv ? accountsAktif().filter(sipAkunValid) : accountsAktif();
+  if(r.metode && metList.indexOf(r.metode)===-1) metList.push(r.metode);
+  fillSelectAccounts('rce-metode', metList);
+  ov.querySelector('#rce-metode').value = r.metode;
+  ov.querySelector('#rce-batal').addEventListener('click', function(){ rekModalClose(ov); });
+  ov.querySelector('#rce-simpan').addEventListener('click', function(){
+    var q = function(x){ return ov.querySelector(x); };
+    var metode = q('#rce-metode').value, jumlah = parseMoneyValue(q('#rce-jumlah').value), tgl = q('#rce-tanggal').value;
+    var interval = parseInt(q('#rce-interval').value,10) || 1, satuan = q('#rce-satuan').value || 'bulan';
+    if(!jumlah || jumlah<=0){ toast('Isi jumlah dulu'); return; }
+    if(!tgl){ toast('Isi tanggal mulai dulu'); return; }
+    var label = r.label, extra = {};
+    if(isInv){
+      var insV = q('#rce-instrumen').value, plV = q('#rce-platform').value;
+      if(!sipAkunValid(metode)){ toast('Sumber dana SIP harus rekening investasi/sekuritas (Freshmoney)'); return; }
+      var kodeV = invNormKode(q('#rce-kode').value, insV);
+      if(!kodeV){ toast('Isi kode/nama produk dulu (cth: Bibit Pasar Uang)'); return; }
+      extra = { instrumen:insV, platform:plV, kode:kodeV }; label = insV+' '+kodeV;
+    } else { label = q('#rce-label').value || r.label; }
+    r.label = label; r.metode = metode; r.jumlah = jumlah; r.nextDue = tgl; r.intervalBulan = interval; r.satuan = satuan; r.ket = q('#rce-ket').value;
+    for(var k in extra) r[k] = extra[k];
+    saveData(); rekModalClose(ov);
+    toast(L('Transaksi berulang diperbarui','Recurring transaction updated'));
+    renderRecurringList();
+  });
+}
 function hapusRecurring(id){
   showConfirm('Hapus transaksi berulang ini? Transaksi yang udah tercatat sebelumnya tetap aman, cuma nggak akan otomatis lagi ke depannya.', function(){
     DATA.recurring = DATA.recurring.filter(function(x){ return x.id!==id; });
@@ -16137,6 +16226,7 @@ function renderRecurringList(){
         '<div class="rc2-due"><span>Berikutnya <b>'+tglTxt+'</b></span><span class="rc2-badge" style="--b:'+badgeC+';">'+badgeTxt+'</span></div>'+
         '<div class="rc2-bar"><i style="width:'+pctRc+'%;"></i></div>'+
         '<div class="rc2-acts">'+
+          '<button type="button" class="rc2-btn" data-recurring-action="edit" data-recurring-id="'+r.id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>Edit</button>'+
           '<button type="button" class="rc2-btn" data-recurring-action="toggle" data-recurring-id="'+r.id+'"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'+icoToggle+'</svg>'+(r.aktif?'Jeda':'Aktifkan')+'</button>'+
           '<button type="button" class="rc2-btn danger" data-recurring-action="hapus" data-recurring-id="'+r.id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Hapus</button>'+
         '</div></div></div>';
@@ -22132,6 +22222,7 @@ function wireEvents(){
       var rid = ract.getAttribute('data-recurring-id');
       if(ract.getAttribute('data-recurring-action')==='toggle') toggleRecurring(rid);
       else if(ract.getAttribute('data-recurring-action')==='hapus') hapusRecurring(rid);
+      else if(ract.getAttribute('data-recurring-action')==='edit') editRecurring(rid);
       return;
     }
     var aact = ev.target.closest('[data-akun-action]');
@@ -24018,7 +24109,7 @@ if(document.readyState==='loading'){
   /* ===== Terjemahan tambahan (tahap 4: perluasan cakupan) ===== */
   var XB1 = {"Kelola Lokasi":"Manage Locations","Saldo bebas ›": "Free balance ›", "Saldo bebas setelah rencana": "Free balance after plans", "Saldo bebas setelah rencana belanja dan target nabung": "Free balance after shopping plans and savings goals", "Rencana Belanja": "Shopping Plans", "Susun & cek anggaran": "Build & check the budget", "Listrik, internet, dll": "Electricity, internet, etc.", "Penghasilan pasif": "Passive income", "Urunan bersama": "Shared contributions", "Ternak & kebun": "Livestock & garden", "Animasi dashboard": "Dashboard animation", "Dashboard ringkas": "Compact dashboard", "Animasi: Hidup": "Animation: On", "Kelompokkan berdasarkan": "Group by", "Cara kerjanya": "How it works", "1. Susun.": "1. Build.", "2. Beri prioritas.": "2. Set priorities.", "3. Cek.": "3. Check.", "4. Belanja.": "4. Shop.", "IPO Saham": "Stock IPO", "+ Pesan IPO": "+ Place IPO Order", "Pesan IPO Saham": "Place Stock IPO Order", "Kode saham": "Stock code", "Pesan": "Place Order", "Hasil Penjatahan IPO": "IPO Allotment Result", "Pesanan IPO": "IPO order", "Batalkan pesanan IPO": "Cancel IPO order", "satuan": "unit", "Khusus": "Special", "Saham (bonus)": "Stock (bonus)", "Cara Hitung": "Calculation Method", "Kepemilikan saat cum date": "Holdings on cum date", "Ringkas (1–2 halaman)": "Brief (1–2 pages)", "Palet warna": "Color palette", "Palet": "Palette", "Penjelasan": "Explanation", "Merk": "Brand", "Merk (opsional)": "Brand (optional)", "Nama barang": "Item name", "Instrumen Investasi (saham, emas, dll)": "Investment Instrument (stocks, gold, etc.)", "Prioritas": "Priority", "Wajib (kebutuhan pokok)": "Must (basic needs)", "Perlu (sebaiknya tercapai)": "Need (should be achieved)", "Perlu (sebaiknya dibeli)": "Need (should be bought)", "Investasi / Autodebet SIP": "Investment / SIP Autodebit", "SIP hanya dipotong dari": "SIP is only deducted from the", "rekening investasi/sekuritas. Kalau Freshmoney Rp0, kurang dari nominal SIP, atau sedang tertahan untuk IPO, pemotongan otomatis pada tanggal itu": "investment/brokerage account. If Freshmoney is Rp0, less than the SIP amount, or held for an IPO, the automatic deduction on that date is", "digagalkan": "cancelled", "(tidak dicatat) dan kamu diberi tahu.": "(not recorded) and you will be notified.", "Filter Status": "Filter by Status", "Arsip": "Archive", "Jumlah yang Gagal Panen": "Failed Harvest Quantity", "→ Kesehatan,": "→ Health,", "→ Perawatan Diri,": "→ Personal Care,", "Kartu ›": "Cards ›", "Login Google butuh internet. Coba lagi setelah online.": "Google sign-in needs internet. Try again once you are online.", "Hapus foto sampul?": "Remove the cover photo?", "Ditandai sudah diganti": "Marked as replaced", "Bagian pemilik harus antara 0 dan 100": "The owner's share must be between 0 and 100", "Daftar disalin": "List copied", "Titipan tidak valid": "Invalid held fund", "Nama barang tidak boleh kosong": "Item name cannot be empty", "Isi nama barang dulu": "Enter the item name first", "Isi jumlah yang gagal panen": "Enter the failed harvest quantity", "Pilih item dulu": "Choose an item first", "Pilih platform/sekuritas dulu": "Choose a platform/broker first", "Isi jumlah lot yang didapat (0 kalau tidak dapat)": "Enter the lots received (0 if none)", "Sumber dana SIP harus rekening investasi/sekuritas (Freshmoney)": "The SIP funding source must be an investment/brokerage account (Freshmoney)", "Isi kode/nama produk dulu (cth: Bibit Pasar Uang)": "Enter the product code/name first (e.g. Bibit Money Market)", "Memproses…": "Processing…", "Kelola Target": "Manage Goals", "Perbarui Dividen": "Update Dividend", "Edit Dividen": "Edit Dividend"};
   for(var kB1 in XB1) if(!(kB1 in D)) D[kB1]=XB1[kB1];
-  var XRK = {"Rekening lain": "Other accounts", "Tutup Rekening": "Close Account", "Buka Kembali": "Reopen", "Rekening Ditutup": "Closed Accounts", "Tambah dari Daftar": "Add from List", "Pilih rekening yang baru kamu pakai.": "Choose the accounts you have just started using.", "Rekening apa saja yang kamu pakai?": "Which accounts do you use?", "Pilih yang kamu punya saja supaya pilihan rekening tidak penuh. Bisa ditambah lagi nanti di Atur → Kelola Rekening.": "Pick only the ones you have so the account choices stay tidy. You can add more later in Settings → Manage Accounts.", "Rekening lain (opsional, pisahkan dengan koma)": "Other accounts (optional, separated by commas)", "Pakai Semua": "Use All", "Mulai": "Start", "Pindahkan saldo ke": "Move balance to", "Cash / Tunai": "Cash", "Batal": "Cancel"};
+  var XRK = {"Rekening lain": "Other accounts", "Pengeluaran Aset & Stok": "Asset & Stock Spending", "Uang yang dipakai membeli aset dan stok pada periode ini, dipisah per jenis. Tidak termasuk pemakaian stok.": "Money spent buying assets and stock in this period, split by type. Excludes stock usage.", "Tutup Rekening": "Close Account", "Buka Kembali": "Reopen", "Rekening Ditutup": "Closed Accounts", "Tambah dari Daftar": "Add from List", "Pilih rekening yang baru kamu pakai.": "Choose the accounts you have just started using.", "Rekening apa saja yang kamu pakai?": "Which accounts do you use?", "Pilih yang kamu punya saja supaya pilihan rekening tidak penuh. Bisa ditambah lagi nanti di Atur → Kelola Rekening.": "Pick only the ones you have so the account choices stay tidy. You can add more later in Settings → Manage Accounts.", "Rekening lain (opsional, pisahkan dengan koma)": "Other accounts (optional, separated by commas)", "Pakai Semua": "Use All", "Mulai": "Start", "Pindahkan saldo ke": "Move balance to", "Cash / Tunai": "Cash", "Batal": "Cancel"};
   for(var kRK in XRK) if(!(kRK in D)) D[kRK]=XRK[kRK];
   RXC = ([["^Pesanan IPO (.+) dibatalkan$", "IPO order $1 cancelled"], ["^Pesanan IPO (.+) dicatat, dana (.+) ditahan$", "IPO order $1 recorded, $2 held"], ["^Batalkan pesanan IPO (.+)\\? Dana (.+) dilepas kembali dan tidak ada pembelian yang dicatat\\.$", "Cancel IPO order $1? The $2 funds are released back and no purchase is recorded."], ["^Hapus rencana \"(.+)\"\\? Belanja yang sudah tercatat tidak ikut terhapus\\.$", "Delete plan \"$1\"? Purchases already recorded are not deleted."], ["^Uang titipan yang tersedia hanya (.+)$", "The available held funds are only $1"], ["^Jumlah tidak boleh di bawah modal yang sudah diinvestasikan \\((.+)\\)$", "Amount cannot be below the capital already invested ($1)"], ["^Modal titipan ini masih di investasi \\((.+)\\)\\. Jual dulu sebelum dikembalikan\\.$", "This held capital is still invested ($1). Sell it first before returning."], ["^Lot yang didapat tidak boleh lebih dari yang dipesan \\((.+) lot\\)$", "Lots received cannot exceed lots ordered ($1 lots)"], ["^Tanggal penjatahan tidak boleh sebelum tanggal pesan \\((.+)\\)$", "Allotment date cannot be before the order date ($1)"], ["^Catatan ini dibuat otomatis dari (.+)\\. Ubah lewat halaman (.+)\\.$", "This record was created automatically from $1. Edit it on the $2 page."], ["^Catatan ini dibuat otomatis dari (.+)\\. Hapus lewat halaman (.+) supaya data tetap sinkron\\.$", "This record was created automatically from $1. Delete it on the $2 page so the data stays in sync."], ["^Total: (\\d+) item( • .+)?$", "Total: $1 items$2"], ["^Dikeluarkan (\\d{4}-\\d{2}-\\d{2})$", "Removed $1"], ["^Gagal (\\d[\\d.,]*) (.+)$", "$1 $2 failed"]].map(function(a){ return [new RegExp(a[0]), a[1]]; })).concat(RXC);
   var COA11 = [["5-100", "Beban Makan & Minum", "Food & Drink Expenses"], ["5-200", "Beban Transportasi", "Transportation Expenses"], ["5-300", "Beban Tagihan & Langganan", "Bills & Subscriptions Expenses"], ["5-300", "Beban Bills & Langganan", "Bills & Subscriptions Expenses"], ["5-400", "Beban Kebutuhan Rumah & Pribadi", "Household & Personal Needs Expenses"], ["5-450", "Beban Pemakaian Stok", "Stock Usage Expenses"], ["5-500", "Beban Sosial & Donasi", "Social & Donation Expenses"], ["5-600", "Beban Admin & Biaya Keuangan", "Admin & Financial Expenses"], ["5-700", "Kerugian", "Losses"], ["5-900", "Beban Lain-lain", "Other Expenses"], ["1-200", "Inventaris (Aset Tetap)", "Inventory (Fixed Assets)"], ["1-300", "Aset Biologis", "Biological Assets"], ["1-400", "Persediaan (Stok Habis Pakai)", "Supplies (Consumable Stock)"], ["1-500", "Investasi", "Investments"], ["4-100", "Pendapatan Gaji & Rutin", "Salary & Regular Income"], ["4-200", "Pendapatan Usaha & Sampingan", "Business & Side Income"], ["4-300", "Pendapatan Penjualan Aset & Stok", "Asset & Stock Sales Income"], ["4-400", "Pendapatan Investasi", "Investment Income"], ["4-900", "Pendapatan Lain-lain", "Other Income"]];
