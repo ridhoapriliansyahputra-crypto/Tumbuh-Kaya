@@ -9059,6 +9059,51 @@ document.addEventListener('click', function(e){
   var b = e.target.closest ? e.target.closest('[data-tt-pindah]') : null;
   if(b){ bukaPindahTitipan(parseInt(b.getAttribute('data-tt-pindah'),10)); }
 });
+/* ===== Kembalikan titipan langsung dari kartu (tanpa harus buka form edit) ===== */
+function ttKembalikan(i){
+  var t = DATA.titipan[i]; if(!t || t.status!=='Aktif') return;
+  var inv = ttIsInv(t), hasil = 0;
+  if(inv){
+    var hC = ttAdaInv() ? ttInvHitung()[t.id] : null;
+    if(hC){
+      if(hC.modalTersisa>0.5){ toast('Modal titipan ini masih di investasi ('+fmt(hC.modalTersisa)+'). Jual dulu sebelum dikembalikan.'); return; }
+      hasil = hC.bagianPemilik || 0;
+    }
+  }
+  var rekOpts = accountsAktif().map(function(a){ return '<option value="'+escapeHtml(a)+'"'+(a===t.metode?' selected':'')+'>'+escapeHtml(accountOptionLabel(a))+'</option>'; }).join('');
+  var jenisOpts = (DATA.jenisPengeluaran||[]).map(function(j){ return '<option value="'+escapeHtml(j)+'">'+escapeHtml(j)+'</option>'; }).join('');
+  var ov = rekModal(
+    '<h3 style="margin:0 0 4px;">Kembalikan Titipan</h3>'+
+    '<div style="font-size:12.5px; color:var(--text-2); margin-bottom:10px;">'+escapeHtml(t.nama||'Titipan')+' • '+fmt(t.jumlah)+(hasil>0 ? ' + bagi hasil '+fmt(hasil) : '')+'</div>'+
+    '<label>Dikembalikan pakai rekening</label><select id="ttk-rek">'+rekOpts+'</select>'+
+    '<label style="margin-top:10px;">Tanggal dikembalikan</label><input type="date" id="ttk-tgl" value="'+todayISO()+'">'+
+    (inv ? '' :
+      '<label style="display:flex; align-items:center; gap:8px; margin-top:12px;"><input type="checkbox" id="ttk-catat" style="width:auto; margin:0;"> Catat juga sebagai pengeluaranku</label>'+
+      '<div id="ttk-jenis-wrap" style="display:none;"><label>Kategori</label><select id="ttk-jenis">'+jenisOpts+'</select></div>')+
+    '<div style="font-size:11.5px; color:var(--text-2); margin-top:10px; line-height:1.5;">Saldo rekening berkurang sebesar jumlah titipan'+(hasil>0?' + bagi hasil':'')+'. Status titipan menjadi "Dikembalikan".</div>'+
+    '<div id="ttk-err" style="color:var(--danger); font-size:12px; min-height:16px; margin-top:6px;"></div>'+
+    '<div style="display:flex; gap:10px; margin-top:6px;"><button type="button" class="btn ghost" id="ttk-batal" style="flex:1; margin:0;">Batal</button><button type="button" class="btn" id="ttk-simpan" style="flex:1; margin:0;">Kembalikan</button></div>');
+  var cb = ov.querySelector('#ttk-catat');
+  if(cb) cb.addEventListener('change', function(){ ov.querySelector('#ttk-jenis-wrap').style.display = this.checked ? '' : 'none'; });
+  ov.querySelector('#ttk-batal').addEventListener('click', function(){ rekModalClose(ov); });
+  ov.querySelector('#ttk-simpan').addEventListener('click', function(){
+    var rek = ov.querySelector('#ttk-rek').value, tgl = ov.querySelector('#ttk-tgl').value;
+    if(!rek){ ov.querySelector('#ttk-err').textContent = 'Pilih rekening'; return; }
+    if(!tgl){ ov.querySelector('#ttk-err').textContent = 'Isi tanggal'; return; }
+    removeTitipanExpense(t);
+    t.status = 'Dikembalikan'; t.metodeBayar = rek; t.tanggalKembali = tgl;
+    if(inv) t.hasilDibayar = hasil;
+    if(cb && cb.checked){ t.catatPg = true; t.jenisCatat = ov.querySelector('#ttk-jenis').value || 'Lain-lain'; }
+    addTitipanExpense(t);
+    saveData(); rekModalClose(ov);
+    renderTitipanList(); renderPengeluaranList(); renderReminders(); renderDashboard();
+    toast('Titipan '+fmt(t.jumlah)+' dikembalikan');
+  });
+}
+document.addEventListener('click', function(e){
+  var b = e.target.closest ? e.target.closest('[data-tt-kembali]') : null;
+  if(b){ ttKembalikan(parseInt(b.getAttribute('data-tt-kembali'),10)); }
+});
 /* ===== Jadikan dana titipan jadi hutang =====
    Uang titipan sudah ada di saldo rekening. Saat dijadikan hutang, titipan ditandai "Dijadikan Hutang" (tetap menambah saldo, tidak lagi dihitung
    sebagai titipan aktif) dan dibuat catatan Hutang bertanda tanpaSaldo supaya saldo tidak dobel. Kalau jumlahnya sebagian, titipan dipecah dua. */
@@ -14782,7 +14827,7 @@ function renderTitipanList(){
     html += loanCard({icon:ICONS.cash, title:t.nama||'-', amount:t.jumlah, status:t.status,
       chips:(t.untuk ? '<span class="badge" style="background:rgba(255,255,255,.06); color:var(--text-2);">'+escapeHtml(t.untuk)+'</span>' : ''),
       line:(t.tanggal ? fmtTglIndo(t.tanggal)+' • ' : '')+lineRek, ket:t.ket, info:lineKembali, due:due,
-      actions:(t.status==='Aktif' ? '<div style="padding:0 0 6px;"><span data-tt-pindah="'+i+'" style="font-size:11.5px; font-weight:700; color:var(--primary); cursor:pointer;">Pindah rekening</span><span data-tt-jejak="'+i+'" style="font-size:11.5px; font-weight:700; color:var(--primary); cursor:pointer; margin-left:14px;">Jejak uang'+((t.jejak||[]).some(function(x){ return x.jenis==='alih' && !x.diganti; }) ? ' ⚠' : '')+'</span>'+(titipanBisaJadiHutang(t) ? '<span data-tt-hutang="'+i+'" style="font-size:11.5px; font-weight:700; color:var(--warn); cursor:pointer; margin-left:14px;">Jadikan hutang</span>' : '')+'</div>' : '')+txnActions('titipan',i)});
+      actions:(t.status==='Aktif' ? '<div style="padding:0 0 6px;"><span data-tt-pindah="'+i+'" style="font-size:11.5px; font-weight:700; color:var(--primary); cursor:pointer;">Pindah rekening</span><span data-tt-jejak="'+i+'" style="font-size:11.5px; font-weight:700; color:var(--primary); cursor:pointer; margin-left:14px;">Jejak uang'+((t.jejak||[]).some(function(x){ return x.jenis==='alih' && !x.diganti; }) ? ' ⚠' : '')+'</span>'+'<span data-tt-kembali="'+i+'" style="font-size:11.5px; font-weight:700; color:var(--primary); cursor:pointer; margin-left:14px;">Kembalikan</span>'+(titipanBisaJadiHutang(t) ? '<span data-tt-hutang="'+i+'" style="font-size:11.5px; font-weight:700; color:var(--warn); cursor:pointer; margin-left:14px;">Jadikan hutang</span>' : '')+'</div>' : '')+txnActions('titipan',i)});
   }
   lfCount('tt', shown, DATA.titipan.length, 'titipan', sum);
   el.innerHTML = shown ? html : '<div class="empty">Tidak ada dana titipan yang cocok.</div>';
