@@ -2769,7 +2769,7 @@ html #view-dividen#view-dividen#view-dividen #dv-list .txn-row.v2{border-left:4p
       <div class="field"><label>Tanggal</label><input type="date" id="ib-tanggal"></div>
       <div class="field"><label>Instrumen Investasi</label><select id="ib-instrumen"></select></div>
       <div class="field"><label>Platform/Sekuritas</label><select id="ib-platform"></select></div>
-      <div class="field"><label>Kode/Nama Produk</label><input type="text" id="ib-kode" placeholder="cth: BBCA, Emas Antam, BTC"></div>
+      <div class="field"><label>Kode/Nama Produk</label><input type="text" id="ib-kode" placeholder="cth: BBCA, Emas Antam, Simpanan Wajib"></div>
       <div class="field"><label>Metode Pembayaran</label><select id="ib-metode"></select></div>
       <div class="field" id="ib-tt-wrap" style="display:none;"><label>Pakai dana titipan (opsional)</label><select id="ib-titipan"></select>
         <div id="ib-tt-bagian-wrap" style="display:none; margin-top:8px;"><label style="font-size:12px;">Bagian dari pembelian ini yang uang titipan (Rp)</label><input type="text" class="money-input" id="ib-tt-bagian" placeholder="kosong = seluruh pembelian" inputmode="numeric"></div>
@@ -3727,7 +3727,7 @@ html #view-dividen#view-dividen#view-dividen #dv-list .txn-row.v2{border-left:4p
       <div id="goal-invest-wrap" style="display:none;">
         <div class="field"><label>Instrumen Investasi</label><select id="goal-instrumen"></select></div>
         <div class="field"><label>Platform/Sekuritas (opsional)</label><select id="goal-platform"></select></div>
-        <div class="field"><label>Kode/Nama Produk (opsional)</label><input type="text" id="goal-kode" placeholder="cth: BBCA, Emas Antam, BTC">
+        <div class="field"><label>Kode/Nama Produk (opsional)</label><input type="text" id="goal-kode" placeholder="cth: BBCA, Emas Antam, Simpanan Wajib">
           <div class="hint" style="margin-top:4px;">Begitu target lunas, otomatis tercatat sebagai Pembelian Investasi dari kantong tabungan.</div>
         </div>
       </div>
@@ -5019,7 +5019,7 @@ function merchantByName(n){
 }
 var JENIS_ICON = {
   "Saham":"inv_saham", "Emas":"inv_emas", "Reksadana":"inv_reksadana", "ETF":"inv_etf",
-  "Obligasi":"inv_obligasi", "Deposito":"bank", "Crypto":"inv_crypto",
+  "Obligasi":"inv_obligasi", "Deposito":"bank", "Crypto":"inv_crypto", "Simpanan Koperasi":"users",
   "Makanan dan Minuman":"utensils", "Maintenance":"wrench", "Transportasi":"car",
   "Kesehatan":"activity", "Belanja":"cart", "Donasi dan Hadiah":"gift",
   "Travel":"plane", "Hiburan":"film", "Edukasi":"book",
@@ -5163,8 +5163,8 @@ function konversiTerakhirItem(nama){
   }
   return null;
 }
-var INSTR_COLOR = {"Saham":"#2E7DF6","Emas":"#D4A017","Reksadana":"#7B5CFA","ETF":"#0EA5A4","Obligasi":"#3FA34D","Deposito":"#E8703A","Crypto":"#F7931A"};
-var INSTRUMEN_INVESTASI = ["Saham","Emas","Reksadana","ETF","Obligasi","Deposito","Crypto"];
+var INSTR_COLOR = {"Saham":"#2E7DF6","Emas":"#D4A017","Reksadana":"#7B5CFA","ETF":"#0EA5A4","Obligasi":"#3FA34D","Deposito":"#E8703A","Crypto":"#F7931A","Simpanan Koperasi":"#14B8A6"};
+var INSTRUMEN_INVESTASI = ["Saham","Emas","Reksadana","ETF","Obligasi","Deposito","Crypto","Simpanan Koperasi"];
 /* Satuan per instrumen: u = nama satuan, dec = desimal maksimum, mult = isi per satuan (1 lot = 100 lembar), hl = satuan harga */
 var UNIT_INSTRUMEN = {
   Saham:{u:'lot', dec:0, mult:100, hl:'lembar'}, ETF:{u:'lot', dec:0, mult:100, hl:'lembar'},
@@ -5547,7 +5547,7 @@ function akunTotals(start, end){
   function add(k, v){ m[k] = (m[k]||0) + (v||0); }
   DATA.pengeluaran.forEach(function(p){ if(p.tanggal>=start && p.tanggal<=end) add(akunOfPengeluaran(p), p.jumlah); });
   DATA.belanja.forEach(function(b){ if(b.tanggal>=start && b.tanggal<=end) add(akunOfBelanja(b), b.jumlah); });
-  DATA.tagihan.forEach(function(t){ if(t.tanggal>=start && t.tanggal<=end) add(akunOfTagihan(t), t.jumlah); });
+  tagihanDibayar().forEach(function(t){ if(t.tanggal>=start && t.tanggal<=end) add(akunOfTagihan(t), t.jumlah); });
   var pakai = akunPakaiStok(start, end);
   if(pakai>0) add('5-450', pakai);
   var beban = 0, modal = 0, persed = 0;
@@ -8081,6 +8081,18 @@ function stampTglLunas(rec, old){
   var oldDone = !!(old && (old.status==='Lunas' || old.status==='Dikembalikan'));
   if(old && oldDone){ if(old.tglLunasAt) rec.tglLunasAt = old.tglLunasAt; return; }
   if(old && !oldDone){ var t = todayISO(); rec.tglLunasAt = (rec.tanggal && rec.tanggal>t) ? rec.tanggal : t; }
+}
+/* LAPORAN PENGELUARAN: tagihan baru dihitung sebagai pengeluaran kalau SUDAH dibayar.
+   Tagihan "Belum Lunas" tidak dihitung; yang dihitung hanya cicilan yang sudah dibayar (pada tanggal cicilan)
+   dan sisa yang dilunasi (pada tanggal pelunasan). Saldo rekening tidak terpengaruh (sudah benar dari awal). */
+function tagihanDibayar(){
+  var out = [];
+  (DATA.tagihan||[]).forEach(function(t){
+    function mk(tgl, j){ var o = {}; for(var k in t) o[k] = t[k]; o.tanggal = tgl; o.jumlah = j; return o; }
+    cicilanOf(t).forEach(function(c){ if((c.jumlah||0)>0) out.push(mk(c.tanggal||t.tanggal, c.jumlah)); });
+    if(t.status==='Lunas'){ var sisa = sisaPinjamAkhir(t); if(sisa>0) out.push(mk(t.tglLunasAt||t.tanggal, sisa)); }
+  });
+  return out;
 }
 function sisaPinjam(x, lim){
   if(x.status!=='Berjalan' && x.status!=='Belum Lunas' && !selesaiSetelah(x, lim)) return 0;
@@ -12477,7 +12489,7 @@ function buildAiPrompt(){
   /* ===== angka inti: definisi SAMA dengan menu Laporan (akunTotals) ===== */
   var at = akunTotals(s,e);
   var masuk = sumInRange(DATA.pemasukan,'jumlah',s,e);
-  var kPeng = sumInRange(DATA.pengeluaran,'jumlah',s,e), kBel = sumInRange(DATA.belanja,'jumlah',s,e), kTag = sumInRange(DATA.tagihan,'jumlah',s,e);
+  var kPeng = sumInRange(DATA.pengeluaran,'jumlah',s,e), kBel = sumInRange(DATA.belanja,'jumlah',s,e), kTag = sumInRange(tagihanDibayar(),'jumlah',s,e);
   var uangKeluar = kPeng+kBel+kTag;               /* semua uang yang keluar dari rekening (tanpa perpindahan ke investasi) */
   var beban = at.beban, surplus = masuk-beban, net = masuk-uangKeluar;
   var NA = Q('tidak dihitung (tidak ada pemasukan tercatat)','not calculated (no income recorded)');
@@ -12556,7 +12568,7 @@ function buildAiPrompt(){
   L.push(aiMetode('belanjaKeJenis'));
   L.push('');
   L.push(Q('## Tagihan per jenis (dihitung sebagai beban sesuai tanggal tagihan, walau belum dibayar)','## Bills by type (counted as expenses by bill date, even if unpaid)'));
-  L.push(aiLines(aiGroup(DATA.tagihan,function(x){return x.jenis;},s,e),6));
+  L.push(aiLines(aiGroup(tagihanDibayar(),function(x){return x.jenis;},s,e),6));
   var orangList = (DATA.untukSiapa||[]).concat(typeof KATEGORI_ORANG!=='undefined'?KATEGORI_ORANG:[]);
   var untukSelf = 0, untukLain = 0, untukLainnya = 0, untukMap = {};
   pengBeban.forEach(function(p){
@@ -12969,7 +12981,7 @@ function cekKonsistensiAI(){
       var text = buildAiPrompt(), r = aiRange(), s = r.s, e = r.e>today ? today : r.e, tag = '['+per+'] ';
       if(r.s>today){ add(tag+'periode', true, 'periode belum dimulai, dilewati'); return; }
       var masuk = sumInRange(DATA.pemasukan,'jumlah',s,e);
-      var keluar = sumInRange(DATA.pengeluaran,'jumlah',s,e)+sumInRange(DATA.belanja,'jumlah',s,e)+sumInRange(DATA.tagihan,'jumlah',s,e);
+      var keluar = sumInRange(DATA.pengeluaran,'jumlah',s,e)+sumInRange(DATA.belanja,'jumlah',s,e)+sumInRange(tagihanDibayar(),'jumlah',s,e);
       var at = akunTotals(s,e);
       var bebanSpec = DATA.pengeluaran.filter(function(p){ return p.tanggal>=s && p.tanggal<=e && akunOfPengeluaran(p).charAt(0)==='5'; }).reduce(function(t,p){ return t+(p.jumlah||0); },0)
         + DATA.belanja.filter(function(b){ return b.tanggal>=s && b.tanggal<=e && akunOfBelanja(b).charAt(0)==='5'; }).reduce(function(t,b){ return t+(b.jumlah||0); },0)
@@ -20288,7 +20300,7 @@ function generateInsights(year){
   var totalPemasukan = totalPemasukanAll - nonRutinY; /* penghasilan rutin: hasil jual aset/stok & keuntungan investasi tidak dihitung */
   var totalPengeluaranKat = sumInRange(DATA.pengeluaran, 'jumlah', start, end);
   var totalBelanja = sumInRange(DATA.belanja, 'jumlah', start, end);
-  var totalTagihan = sumInRange(DATA.tagihan, 'jumlah', start, end);
+  var totalTagihan = sumInRange(tagihanDibayar(), 'jumlah', start, end);
   var totalInvBeli = sumInRange(DATA.invbeli, 'jumlah', start, end);
   var totalInvJual = sumInRange(DATA.invjual, 'jumlah', start, end);
   var atYear = akunTotals(start, end);
@@ -20409,7 +20421,7 @@ function generateInsights(year){
   /* --- 8. Tagihan terbesar --- */
   if(totalTagihan>0){
     var maxTag=null, maxTagVal=-1, tagMap = {};
-    DATA.tagihan.forEach(function(t){ if(t.tanggal>=start && t.tanggal<=end){ var kk = t.jenis||'Lainnya'; tagMap[kk] = (tagMap[kk]||0)+(t.jumlah||0); } });
+    tagihanDibayar().forEach(function(t){ if(t.tanggal>=start && t.tanggal<=end){ var kk = t.jenis||'Lainnya'; tagMap[kk] = (tagMap[kk]||0)+(t.jumlah||0); } });
     Object.keys(tagMap).forEach(function(jn){ if(tagMap[jn]>maxTagVal){ maxTagVal=tagMap[jn]; maxTag=jn; } });
     insightPush(items, 'info', '🧾', L('Tagihan terbesar: "'+maxTag+'" senilai '+fmt(maxTagVal)+' dari total tagihan '+fmt(totalTagihan)+'.', 'Largest bill: "'+tn(maxTag)+'" worth '+fmt(maxTagVal)+' out of total bills '+fmt(totalTagihan)+'.'));
   }
@@ -21156,7 +21168,7 @@ function svgPrintPerformaChart(start, end){
   var dataMasuk = [], dataKeluar = [];
   bk.items.forEach(function(x){
     dataMasuk.push(sumInRange(DATA.pemasukan, 'jumlah', x.s, x.e));
-    dataKeluar.push(sumInRange(DATA.pengeluaran, 'jumlah', x.s, x.e) + sumInRange(DATA.belanja, 'jumlah', x.s, x.e) + sumInRange(DATA.tagihan, 'jumlah', x.s, x.e));
+    dataKeluar.push(sumInRange(DATA.pengeluaran, 'jumlah', x.s, x.e) + sumInRange(DATA.belanja, 'jumlah', x.s, x.e) + sumInRange(tagihanDibayar(), 'jumlah', x.s, x.e));
   });
 
   var w = 620, h = 230, pad = {left:46, right:10, top:22, bottom:26};
@@ -21264,7 +21276,7 @@ function exportLaporanPDF(){
   var totalPemasukan = sumInRange(DATA.pemasukan, 'jumlah', start, end);
   var totalPengeluaran = sumInRange(DATA.pengeluaran, 'jumlah', start, end);
   var totalBelanja = sumInRange(DATA.belanja, 'jumlah', start, end);
-  var totalTagihan = sumInRange(DATA.tagihan, 'jumlah', start, end);
+  var totalTagihan = sumInRange(tagihanDibayar(), 'jumlah', start, end);
   var totalKeluar = totalPengeluaran + totalBelanja + totalTagihan;
   var netCashflow = totalPemasukan - totalKeluar;
   var at = akunTotals(start, end);
@@ -21282,7 +21294,7 @@ function exportLaporanPDF(){
     var psD = new Date(peD.getTime()); psD.setDate(psD.getDate()-(lenHari-1));
     pEnd = nwIso(peD); pStart = nwIso(psD);
     pPemasukan = sumInRange(DATA.pemasukan, 'jumlah', pStart, pEnd);
-    pKeluar = sumInRange(DATA.pengeluaran, 'jumlah', pStart, pEnd) + sumInRange(DATA.belanja, 'jumlah', pStart, pEnd) + sumInRange(DATA.tagihan, 'jumlah', pStart, pEnd);
+    pKeluar = sumInRange(DATA.pengeluaran, 'jumlah', pStart, pEnd) + sumInRange(DATA.belanja, 'jumlah', pStart, pEnd) + sumInRange(tagihanDibayar(), 'jumlah', pStart, pEnd);
     pNet = pPemasukan - pKeluar;
     pAt = akunTotals(pStart, pEnd);
     pSurplus = pPemasukan - pAt.beban;
@@ -21549,7 +21561,7 @@ function exportLaporanPDF(){
   var msPemasukan = monthlyCategorySeries(DATA.pemasukan, sumberP, start, end);
   var msPengeluaran = monthlyCategorySeries(pengeluaranPerJenis(), akunJenisKey, start, end);
   var msBelanja = monthlyCategorySeries(DATA.belanja, function(x){ return x.item; }, start, end);
-  var msTagihan = monthlyCategorySeries(DATA.tagihan, function(x){ return x.jenis; }, start, end);
+  var msTagihan = monthlyCategorySeries(tagihanDibayar(), function(x){ return x.jenis; }, start, end);
   var msInvBeli = monthlyCategorySeries(DATA.invbeli, function(x){ return x.instrumen; }, start, end);
   var msInvJual = monthlyCategorySeries(DATA.invjual, function(x){ return x.instrumen; }, start, end);
   var msSaldo = monthlySaldoSeries(start, end);
@@ -21571,7 +21583,7 @@ function exportLaporanPDF(){
       '<table>'+rowsFor(DATA.belanja,function(x){return x.item;},'Item')+'</table></div>'+
     '<div class="pr-section"><h2><span class="n">09</span>Tagihan per Jenis</h2>'+
       printCatChart(msTagihan, 'Total tagihan')+
-      '<table>'+rowsFor(DATA.tagihan,function(x){return x.jenis;},'Jenis')+'</table></div>'+
+      '<table>'+rowsFor(tagihanDibayar(),function(x){return x.jenis;},'Jenis')+'</table></div>'+
   '</div>';
 
   html += '<div class="pr-section"><h2><span class="n">10</span>Produk Investasi Periode Ini</h2>'+
@@ -21926,7 +21938,7 @@ function exportLaporanCSV(){
   var totalPemasukan = sumInRange(DATA.pemasukan, 'jumlah', start, end);
   var totalPengeluaran = sumInRange(DATA.pengeluaran, 'jumlah', start, end);
   var totalBelanja = sumInRange(DATA.belanja, 'jumlah', start, end);
-  var totalTagihan = sumInRange(DATA.tagihan, 'jumlah', start, end);
+  var totalTagihan = sumInRange(tagihanDibayar(), 'jumlah', start, end);
   var totalKeluar = totalPengeluaran + totalBelanja + totalTagihan;
   var netCashflow = totalPemasukan - totalKeluar;
   var totalInvBeli = sumInRange(DATA.invbeli, 'jumlah', start, end);
@@ -21998,7 +22010,7 @@ function exportLaporanCSV(){
 
   rows.push(['TAGIHAN PER JENIS']);
   rows.push(['Jenis','Nominal (Rp)']);
-  mapRows(DATA.tagihan, function(x){ return x.jenis; }).forEach(function(r){ rows.push(r); });
+  mapRows(tagihanDibayar(), function(x){ return x.jenis; }).forEach(function(r){ rows.push(r); });
   rows.push([]);
 
   rows.push(['PRODUK INVESTASI']);
@@ -22655,7 +22667,7 @@ function renderGrafik(){
     return { label:jn, color:paletteColor(i, DATA.jenisTagihan.length),
       data: BK.map(function(b){
         var start = b.start, end = b.end, s=0;
-        DATA.tagihan.forEach(function(x){ if(x.jenis===jn && x.tanggal>=start && x.tanggal<=end) s+=x.jumlah; });
+        tagihanDibayar().forEach(function(x){ if(x.jenis===jn && x.tanggal>=start && x.tanggal<=end) s+=x.jumlah; });
         return s;
       }) };
   });
