@@ -2448,7 +2448,7 @@ html #view-dividen#view-dividen#view-dividen #dv-list .txn-row.v2{border-left:4p
         <input type="hidden" id="pg-merchant" value="">
         <div class="mp-hint">Tap untuk pilih, tap lagi untuk batal. Kalau kosong, ikon mengikuti Jenis.</div>
       </div>
-      <div class="field"><label>Keterangan (opsional)</label><input type="text" id="pg-ket" maxlength="100" placeholder="cth: makan siang"></div>
+      <div class="field" id="pg-ket-wrap"><label>Keterangan (opsional)</label><input type="text" id="pg-ket" maxlength="100" placeholder="cth: makan siang"></div>
       <button class="btn" id="btn-keluar">Simpan Pengeluaran</button>
     </div>
     <div class="hint" id="pg-belanja-hint" style="display:none;">💡 Kategori "Belanja" ada form khusus per item di menu Lainnya → Belanja Item.</div>
@@ -6815,7 +6815,7 @@ function renderAuth(){
         '<div class="wz-row"><span class="d bill"></span><b>Internet</b><em>12 hari lagi</em></div>'+
         '<div class="wz-meter"><b>Dana darurat</b><span><i style="width:60%"></i></span></div>'}
     ];
-    html += '<div class="wz-welcome"><div class="wz-hero"><div class="wz-brand"><span class="wz-mark">'+logoImg+'</span><span class="wz-bn"><b>Tumbuh Kaya</b><small>Dompet digital pribadi</small></span></div><div class="wz-track" id="wz-track">';
+    html += '<div class="wz-welcome"><div class="wz-hero"><div class="wz-brand"><span class="wz-mark">'+logoImg+'</span><span class="wz-bn"><b>Tumbuh Kaya</b><small>Dompet digital pribadi</small></span></div><p class="wz-tagline">Catat keuanganmu dengan rapi, dari pemasukan sampai target tabungan.</p><div class="wz-track" id="wz-track">';
     slides.forEach(function(sl){
       html += '<div class="wz-slide"><p class="wz-cap">'+sl.t+'</p><div class="wz-stage">'+
         '<span class="wz-chip c1">'+sl.c1+'</span><div class="wz-demo">'+sl.demo+'</div><span class="wz-chip c2">'+sl.c2+'</span></div></div>';
@@ -8361,6 +8361,9 @@ function pgSetSplitMode(on){
   document.getElementById('pg-jenis-wrap').style.display = on ? 'none' : '';
   document.getElementById('pg-jumlah-wrap').style.display = on ? 'none' : '';
   document.getElementById('pg-split-wrap').style.display = on ? '' : 'none';
+  /* Mode split: tiap kategori punya keterangan sendiri, jadi keterangan umum disembunyikan */
+  var ketW = document.getElementById('pg-ket-wrap'); if(ketW) ketW.style.display = on ? 'none' : '';
+  if(on){ var ketI = document.getElementById('pg-ket'); if(ketI) ketI.value = ''; }
   document.getElementById('pg-split-on').classList.toggle('active', on);
   document.getElementById('pg-split-off').classList.toggle('active', !on);
   if(on && document.querySelectorAll('#pg-split-rows .split-row').length===0){
@@ -12189,7 +12192,7 @@ function buildAllTransactions(){
     var lblT = (x.merchant?merchantCanon(x.merchant)+' • ':'')+x.jenis+' • '+accountOptionLabel(x.metode);
     if(x.status==='Belum Lunas'){
       /* Belum dibayar: tampil sebagai pengingat netral, BUKAN pengeluaran (tidak ikut total keluar, saldo tidak berubah). Cicilan yang sudah dibayar tetap tampil sebagai pengeluaran. */
-      all.push({tanggal:x.tanggal, jumlah:x.jumlah, tipe:'Tagihan', label:lblT, sign:0, nonKas:true, nonKasNote:L('Belum dibayar, belum dihitung sebagai pengeluaran','Unpaid, not counted as an expense yet'), type:'tagihan', index:i, merchant:merchantCanon(x.merchant), ket:x.ket||''});
+      /* Tagihan belum lunas tidak dicatat di Riwayat; baru muncul setelah dibayar (lunas/cicilan). */
       cicilanOf(x).forEach(function(c){ all.push({tanggal:c.tanggal, jumlah:c.jumlah, tipe:'Cicilan Tagihan', label:(x.merchant?merchantCanon(x.merchant)+' • ':'')+x.jenis+' • '+accountOptionLabel(c.metode||x.metode), sign:-1, type:'tagihan', index:i, merchant:merchantCanon(x.merchant), ket:c.ket||''}); });
     } else {
       all.push({tanggal:x.tanggal, jumlah:x.jumlah, tipe:'Tagihan', label:lblT, sign:-1, type:'tagihan', index:i, merchant:merchantCanon(x.merchant), ket:x.ket||''});
@@ -33428,6 +33431,64 @@ html[data-layout="desktop"] #view-rencana-belanja main{max-width:860px; width:10
   html[data-theme="light"] #screen-auth .key:not(.empty):not(.del):not(.bio){border:1.5px solid #000 !important; box-shadow:none !important; background:#fff !important;}
   html[data-theme="light"] #screen-auth .pin-dot{border-color:#000;}
   html[data-theme="light"] #screen-auth .pin-dot.filled{background:#000; border-color:#000;}
+</style>
+<style id="tk-login-v3">
+/* Layar login v3: desktop = form kiri + panel info kanan (geser per kartu); HP = logo tengah + tombol di bawah. Terang & gelap. Warna polos. */
+#screen-auth #auth-inner .wz-tagline{display:none;}
+#screen-auth #auth-inner .wz-stage .wz-demo .wz-meter i{background:var(--primary);}
+#screen-auth #auth-inner .wz-stage .wz-demo .wz-meter i.hi{background:#F5B921;}
+html:not([data-theme="light"]) #screen-auth{--tk-panel:#0A2F2B; --tk-card:#1B2724; --tk-card-line:#2A3C38; --tk-circ1:#262A18; --tk-circ2:#1A1F36; --tk-sec:#1B2724; --tk-sec-line:#3A524D;}
+html[data-theme="light"] #screen-auth{--tk-panel:#0B7A6E; --tk-card:#F5ECDA; --tk-card-line:#E3D6BA; --tk-circ1:#EDE9C4; --tk-circ2:#D6D9F0; --tk-sec:#F5ECDA; --tk-sec-line:#A9C7C1;}
+
+@media (min-width:900px){
+  #screen-auth.wz-on{background-image:none;}
+  #screen-auth.wz-on .auth-fx{display:none !important;}
+  #screen-auth #auth-inner.wz{max-width:none !important; width:100% !important; margin:0; padding:0;}
+  #screen-auth #auth-inner .wz-welcome{display:grid; grid-template-columns:minmax(440px,560px) minmax(0,1fr); grid-template-rows:1fr auto auto 1fr; column-gap:0; padding:0; min-height:100dvh; animation:none;}
+  #screen-auth #auth-inner .wz-hero{display:contents;}
+  #screen-auth #auth-inner .wz-hero::before{display:none;}
+  #screen-auth #auth-inner .wz-brand{grid-column:1; grid-row:2; align-self:end; margin:0; padding:0 clamp(40px,6vw,80px) 22px; justify-content:flex-start;}
+  #screen-auth #auth-inner .wz-sheet{grid-column:1; grid-row:3; align-self:start; margin:0; padding:0 clamp(40px,6vw,80px); background:transparent; border:0; box-shadow:none; border-radius:0; backdrop-filter:none; -webkit-backdrop-filter:none; text-align:left;}
+  #screen-auth #auth-inner .wz-title{font-size:24px; white-space:nowrap; margin-bottom:8px;}
+  #screen-auth #auth-inner .wz-sub{margin:0 0 22px; max-width:none; text-align:left;}
+  #screen-auth #auth-inner .wz-guest{text-align:left; padding-left:0;}
+  #screen-auth #auth-inner .wz-foot .wz-alt{text-align:left;}
+  #screen-auth #auth-inner .wz-pill.pri{background:var(--text); box-shadow:none;}
+  #screen-auth .auth-credit{position:fixed; left:clamp(40px,6vw,80px); bottom:18px; padding:0; text-align:left; z-index:3;}
+  /* panel kanan */
+  #screen-auth #auth-inner .wz-track{grid-column:2; grid-row:1 / 5; align-self:stretch !important; height:auto !important; min-height:100dvh; width:auto !important; margin:0 !important; background:var(--tk-panel); align-items:center;}
+  #screen-auth #auth-inner .wz-slide{padding:0 clamp(40px,5vw,72px); text-align:left;}
+  #screen-auth #auth-inner .wz-cap{color:#fff; font-size:clamp(24px,2.4vw,32px); max-width:560px; margin:0 0 28px;}
+  #screen-auth #auth-inner .wz-stage{width:min(540px,100%) !important; margin:0 !important;}
+  #screen-auth #auth-inner .wz-stage .wz-chip{background:var(--tk-card); color:var(--text); border:1px solid var(--tk-card-line); box-shadow:none;}
+  #screen-auth #auth-inner .wz-stage .wz-demo{background:var(--tk-card); border:1px solid var(--tk-card-line); border-radius:24px; box-shadow:none; padding:20px 22px;}
+  #screen-auth #auth-inner .wz-dots{grid-column:2; grid-row:4; align-self:end; justify-self:start; margin:0 0 40px clamp(40px,5vw,72px); z-index:2;}
+  #screen-auth #auth-inner .wz-dots i{background:rgba(255,255,255,.35);}
+  #screen-auth #auth-inner .wz-dots i.on{background:#fff;}
+}
+
+@media (max-width:899px){
+  #screen-auth.wz-on{background-image:none;}
+  #screen-auth.wz-on .auth-fx{display:none !important;}
+  #screen-auth.wz-on::before{content:""; position:fixed; left:-90px; top:-60px; width:240px; height:240px; border-radius:50%; background:var(--tk-circ1); pointer-events:none;}
+  #screen-auth.wz-on::after{content:""; position:fixed; right:-110px; bottom:220px; width:240px; height:240px; border-radius:50%; background:var(--tk-circ2); pointer-events:none;}
+  #screen-auth #auth-inner .wz-welcome{padding:0 24px 8px; box-sizing:border-box;}
+  #screen-auth #auth-inner .wz-hero{flex:1; min-height:0; justify-content:center; align-items:center; text-align:center; padding-top:env(safe-area-inset-top);}
+  #screen-auth #auth-inner .wz-brand{flex-direction:column; align-items:center; gap:14px; margin:0 0 14px;}
+  #screen-auth #auth-inner .wz-brand .wz-mark{width:96px; height:96px; border-radius:26px; margin:0;}
+  #screen-auth #auth-inner .wz-bn{display:flex; flex-direction:column; align-items:center;}
+  #screen-auth #auth-inner .wz-bn b{font-size:30px; font-weight:800;}
+  #screen-auth #auth-inner .wz-bn small{display:none;}
+  #screen-auth #auth-inner .wz-tagline{display:block; font-size:15px; line-height:1.4; color:var(--text-2); max-width:280px; margin:0 auto;}
+  #screen-auth #auth-inner .wz-track, #screen-auth #auth-inner .wz-dots{display:none !important;}
+  #screen-auth #auth-inner .wz-sheet{background:transparent; border:0; box-shadow:none; border-radius:0; padding:0; margin:0;}
+  #screen-auth #auth-inner .wz-title, #screen-auth #auth-inner .wz-sub{display:none !important;}
+  #screen-auth #auth-inner .wz-pill, #screen-auth #auth-inner .wz-pill.pri, #screen-auth #auth-inner .wz-pill.wz-gbtn{height:56px; border-radius:28px; font-size:16px; margin-bottom:12px;}
+  #screen-auth #auth-inner .wz-pill.pri{background:var(--text); color:var(--bg); box-shadow:none;}
+  #screen-auth #auth-inner .wz-pill.sec{background:var(--tk-sec); border-color:var(--tk-sec-line); color:var(--text);}
+  #screen-auth #auth-inner .wz-foot{margin-top:0;}
+  #screen-auth #auth-inner .wz-guest{text-align:center;}
+}
 </style>
 </body>
 </html>
