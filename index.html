@@ -1839,7 +1839,7 @@ html[data-layout="desktop"] #rc-list > :not(.rc2){grid-column:1 / -1;}
 .goal-acc .goal-sum{display:flex; align-items:center; gap:10px; cursor:pointer; -webkit-tap-highlight-color:transparent;}
 .goal-sum-main{flex:1; min-width:0;}
 .goal-sum-main .goal-name{display:flex; align-items:center; gap:6px; min-width:0; margin:0;}
-.goal-sum-main .goal-name .gn-t{min-width:0; flex:0 1 auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.goal-sum-main .goal-name .gn-t{min-width:0; flex:1 1 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .goal-sum-main .goal-name .goal-prio-chip{flex:none; margin-left:0 !important;}
 .goal-sum-main .meta{margin-top:2px;}
 .goal-caret::after{content:"\25BE"; display:inline-block; color:var(--text-2); font-size:14px; transition:transform .2s;}
@@ -3720,7 +3720,7 @@ html #view-dividen#view-dividen#view-dividen #dv-list .txn-row.v2{border-left:4p
       <div class="hero-sub">Bikin target nabung (misal buat laptop, liburan, dana darurat). Pilih dulu target ini nanti jadi apa (Inventaris, Aset Biologis, Stok Item Baru, atau Pengeluaran Biasa). Begitu uangnya terkumpul penuh, otomatis dibayar dan dicatat sesuai pilihan itu.</div>
     </div>
     <div class="card">
-      <div class="field"><label>Nama Target</label><input type="text" id="goal-nama" placeholder="cth: Laptop baru"></div>
+      <div class="field"><label>Nama Target</label><input type="text" id="goal-nama" maxlength="24" placeholder="cth: Laptop baru"></div>
       <div class="field"><label>Jumlah Target (Rp)</label><input type="text" class="money-input" id="goal-target" placeholder="0" inputmode="numeric"></div>
       <div class="field"><label>Setelah Lunas Jadi</label><select id="goal-jenis">
         <option value="biasa">Pengeluaran Biasa</option>
@@ -6334,6 +6334,8 @@ function applyDataDefaultsCore(){
   rebuildCoa();
   if(!DATA.untukSiapa || !DATA.untukSiapa.length) DATA.untukSiapa = KATEGORI_ORANG.slice();
   if(!DATA.jenisPengeluaran || !DATA.jenisPengeluaran.length) DATA.jenisPengeluaran = JENIS_PENGELUARAN.slice();
+  /* Catatan perbaikan/upgrade aset lama yang memakai jenis "Perbaikan Aset" dipindah ke kategori Maintenance */
+  (DATA.pengeluaran||[]).forEach(function(x){ if(x && x.linkKind==='perbaikan-aset' && x.jenis==='Perbaikan Aset') x.jenis='Maintenance'; });
   if(!DATA.jenisTagihan || !DATA.jenisTagihan.length) DATA.jenisTagihan = JENIS_TAGIHAN.slice();
   if(!DATA.kategoriInventaris || !DATA.kategoriInventaris.length) DATA.kategoriInventaris = KATEGORI_INVENTARIS.slice();
   /* Sekali saja: lengkapi daftar kategori dengan 14 kategori spesifikasi penyusutan (kategori lama & buatan sendiri tidak diubah/dihapus) */
@@ -16237,7 +16239,7 @@ function goalEditHtml(g, i){
   var fld = function(label, inner){ return '<div class="field" style="margin-bottom:10px;"><label>'+label+'</label>'+inner+'</div>'; };
   var opt = function(list, sel){ return list.map(function(x){ return '<option value="'+escapeHtml(x)+'"'+(x===sel?' selected':'')+'>'+escapeHtml(x)+'</option>'; }).join(''); };
   var h = '<div class="card goal-card" style="--goal-color:var(--primary);"><div class="goal-name" style="margin-bottom:10px;">Edit target</div>'+
-    fld('Nama target','<input type="text" id="ge-nama" value="'+escapeHtml(d.nama)+'">')+
+    fld('Nama target','<input type="text" id="ge-nama" maxlength="24" value="'+escapeHtml(d.nama)+'">')+
     fld('Jumlah target (Rp)','<input type="text" class="money-input" id="ge-target" inputmode="numeric" value="'+escapeHtml(d.target)+'"'+(dibeli?' disabled':'')+'>');
   if(!dibeli){
     h += fld('Setelah lunas jadi','<select id="ge-jenis"><option value="biasa"'+(d.jenis==='biasa'?' selected':'')+'>Pengeluaran Biasa</option><option value="inv"'+(d.jenis==='inv'?' selected':'')+'>Aset Inventaris</option><option value="bio"'+(d.jenis==='bio'?' selected':'')+'>Aset Biologis</option><option value="stok"'+(d.jenis==='stok'?' selected':'')+'>Stok Barang</option><option value="invest"'+(d.jenis==='invest'?' selected':'')+'>Instrumen Investasi</option></select>');
@@ -17220,17 +17222,18 @@ function renderInventarisDetail(){
     '<div class="invd-tile alt"><div class="k">Harga Beli</div><div class="v mono">'+fmt(item.harga||0)+'</div></div>'+
     ((adaSusut||adaUpg) ? '<div class="invd-tile"><div class="k">Estimasi Harga Wajar</div><div class="v mono">'+fmt(hargaWajar)+'</div></div>' : '')+
   '</div>';
+  var susutHtml = '';
   if(adaSusut || item.metodeSusut || item.nilaiPasar){
     var umurT = Math.round(sus.umurPakai*10)/10, ekoT = Math.round(sus.umurEko*10)/10;
     var sisaPct = Math.max(0, Math.min(100, Math.round(100 - sus.pctSusut)));
     var tglPer = invTglPerolehan(item);
-    rowsHtml += '<div class="invd-sec">Penyusutan Aset</div>';
+    susutHtml += '<div class="invd-sec">Penyusutan Aset</div>';
     if(adaSusut){
-      rowsHtml += '<div class="invd-susut"><div class="invd-susut-top"><span>Nilai tersisa <b>'+sisaPct+'%</b></span><span>menyusut <b>'+Math.round(sus.pctSusut)+'%</b></span></div>'+
+      susutHtml += '<div class="invd-susut"><div class="invd-susut-top"><span>Nilai tersisa <b>'+sisaPct+'%</b></span><span>menyusut <b>'+Math.round(sus.pctSusut)+'%</b></span></div>'+
         '<div class="invd-track"><div class="invd-fill" style="width:'+sisaPct+'%;"></div></div>'+
         '<div class="invd-susut-note">Garis lurus &bull; usia pakai '+fmtUmurTh(umurT)+' th'+(ekoT>0?' dari umur ekonomis '+fmtUmurTh(ekoT)+' th':'')+(adaUpg?' &bull; belum termasuk upgrade '+fmt(invUpgradeTotal(item)):'')+'</div></div>';
     }
-    rowsHtml += '<div class="invd-grid">'+
+    susutHtml += '<div class="invd-grid">'+
       cell('Harga Awal', '<span class="mono">'+fmt(sus.harga)+'</span>')+
       cell('Total Penyusutan', '<span class="mono">'+fmt(sus.akum)+'</span>')+
       cell('Nilai Buku Saat Ini', '<span class="mono">'+fmt(sus.nilaiBuku)+'</span>')+
@@ -17265,6 +17268,7 @@ function renderInventarisDetail(){
     cell(item.tempatBeli && invAsalNonBeli(item.tempatBeli) ? 'Asal' : 'Tempat Beli / Asal', escapeHtml(item.tempatBeli||'Belum diisi'), 'wide', !item.tempatBeli)+
     cell('Lokasi Keberadaan', escapeHtml(item.lokasi||'Belum diisi')+(itemMapsLink ? '<div><a class="invd-maps" href="'+escapeHtml(itemMapsLink)+'" target="_blank" rel="noopener">📍 Buka di Maps</a></div>' : ''), 'wide', !item.lokasi)+
   '</div>';
+  rowsHtml += susutHtml; /* Penyusutan Aset tampil setelah Informasi Umum dan Perolehan & Lokasi */
   var rowsEl = document.getElementById('invd-rows');
   if(rowsEl) rowsEl.innerHTML = rowsHtml;
   if(rowsEl) Array.prototype.forEach.call(rowsEl.querySelectorAll('.invd-grid'), function(g){
@@ -17351,7 +17355,7 @@ function invPerbDots(inp){
 }
 /* Pengeluaran untuk catatan perbaikan: perawatan = beban (5-400); upgrade = menambah nilai aset, jadi masuk akun Inventaris (1-200), bukan beban rutin */
 function invPerbBuatPengeluaran(item, rec, rek){
-  DATA.pengeluaran.push({ tanggal:rec.tanggal, metode:rek, untuk:'Saya', jenis:'Perbaikan Aset', jumlah:rec.biaya,
+  DATA.pengeluaran.push({ tanggal:rec.tanggal, metode:rek, untuk:'Saya', jenis:'Maintenance', jumlah:rec.biaya,
     akun:(rec.tipe==='upgrade' ? '1-200' : '5-400'),
     ket:(rec.tipe==='upgrade'?'Upgrade ':'Perawatan ')+(item.nama||'')+(rec.ket?' • '+rec.ket:''), linkId:rec.id, linkKind:'perbaikan-aset' });
 }
@@ -23286,7 +23290,20 @@ function wireEvents(){
     var prefix = picker.id.replace('-merchant-picker','');
     var nama = btn.getAttribute('data-m');
     var inp = document.getElementById(prefix+'-merchant');
-    setMerchant(prefix, (inp && inp.value===nama) ? '' : nama);
+    var dipilih = !(inp && inp.value===nama);
+    setMerchant(prefix, dipilih ? nama : '');
+    /* Form Inventaris: memilih merchant otomatis mengisi "Tempat Beli / Asal" (tambah ke master kalau belum ada) */
+    if(prefix==='inv' && dipilih){
+      try{
+        var selT = document.getElementById('inv-tempat-beli');
+        if(selT){
+          var ada = (DATA.tempatBeliInventaris||[]).filter(function(t){ return String(t).toLowerCase()===String(nama).toLowerCase(); })[0];
+          if(!ada){ DATA.tempatBeliInventaris.push(nama); ada = nama; }
+          fillSelectWithBlank('inv-tempat-beli', DATA.tempatBeliInventaris, 'Belum diisi');
+          selT.value = ada;
+        }
+      }catch(err){}
+    }
   });
   document.getElementById('db-acc-filter').addEventListener('change', function(){
     dbAccFilter = this.value;
@@ -27625,7 +27642,7 @@ html[data-layout="desktop"] #view-pengaturan details.set-acc{padding:0 18px; mar
 #view-pengaturan .profile-row{flex-wrap:wrap; row-gap:14px;}
 #view-pengaturan .profile-info{display:contents;}
 #view-pengaturan .profile-info .nm{flex:1; min-width:0; align-self:flex-end; margin-bottom:6px;}
-#view-pengaturan .profile-info .actions{order:3; flex:0 0 100%; flex-wrap:nowrap; gap:8px; margin-top:0;}
+#view-pengaturan .profile-info .actions{order:3; flex:0 0 100%; flex-wrap:wrap; gap:8px; margin-top:0;}
 #view-pengaturan .profile-info .lnk{flex:1 1 auto; text-align:center; white-space:nowrap; padding:8px 10px; font-size:12px;}
 #view-pengaturan .profile-info .lnk.danger{flex:0 0 auto;}
 @media (max-width:380px){ #view-pengaturan .profile-info .lnk{padding:8px 6px; font-size:11px;} }
@@ -33489,6 +33506,13 @@ html[data-theme="light"] #screen-auth{--tk-panel:#0B7A6E; --tk-card:#F5ECDA; --t
   #screen-auth #auth-inner .wz-foot{margin-top:0;}
   #screen-auth #auth-inner .wz-guest{text-align:center;}
 }
+</style>
+<style id="tk-inv-kv-fix">
+/* Baris Lokasi di kartu inventaris: label rata atas, nama lokasi dan tombol Buka di Maps sejajar rata kiri */
+html body .inv-kv{align-items:start !important;}
+html body .inv-kv .k{padding-top:1px;}
+html body .inv-kv .v:has(.maps-chip){flex-direction:column !important; align-items:flex-start !important; flex-wrap:nowrap !important; gap:6px !important;}
+html body .inv-kv .v .maps-chip{margin-left:0 !important;}
 </style>
 </body>
 </html>
