@@ -3725,6 +3725,7 @@ html #view-dividen#view-dividen#view-dividen #dv-list .txn-row.v2{border-left:4p
       <div class="field"><label>Setelah Lunas Jadi</label><select id="goal-jenis">
         <option value="biasa">Pengeluaran Biasa</option>
         <option value="inv">Aset Inventaris</option>
+        <option value="perb">Perawatan / Upgrade Aset Inventaris</option>
         <option value="bio">Aset Biologis</option>
         <option value="stok">Stok Item Baru (belum ada di master stok)</option>
         <option value="invest">Instrumen Investasi (saham, emas, dll)</option>
@@ -3751,6 +3752,15 @@ html #view-dividen#view-dividen#view-dividen #dv-list .txn-row.v2{border-left:4p
           <div class="field" style="flex:1; margin:0;"><label>Satuan</label><select id="goal-satuan"></select></div>
         </div>
       </div>
+      <div id="goal-perb-wrap" style="display:none;">
+        <div class="field"><label>Aset Inventaris yang Dirawat / Di-upgrade</label><select id="goal-perb-aset"></select></div>
+        <div class="field"><label>Jenis Biaya</label><select id="goal-perb-tipe">
+          <option value="perawatan">Perawatan (biaya saja, nilai aset tetap)</option>
+          <option value="upgrade">Upgrade (menambah Estimasi Harga Wajar aset)</option>
+        </select>
+          <div class="hint" style="margin-top:4px;">Begitu target lunas, otomatis tercatat di Catatan Perbaikan aset tersebut dan sebagai pengeluaran Maintenance, dibayar dari kantong tabungan.</div>
+        </div>
+      </div>
       <div id="goal-biasa-wrap">
         <div class="field"><label>Untuk</label><select id="goal-untuk"></select></div>
         <div class="field"><label>Jenis Pengeluaran</label><select id="goal-jenis-pg"></select></div>
@@ -3767,7 +3777,7 @@ html #view-dividen#view-dividen#view-dividen #dv-list .txn-row.v2{border-left:4p
       <button class="btn" id="btn-tambah-goal">Buat Target</button>
     </div>
     <div class="field" style="margin:4px 0 12px;"><label>Kelompokkan Target</label><select id="goal-filter">
-      <option value="semua">Semua</option><option value="inv">Inventaris</option><option value="bio">Biologis</option><option value="stok">Stok Barang</option><option value="invest">Instrumen Investasi</option><option value="biasa">Pengeluaran Biasa</option>
+      <option value="semua">Semua</option><option value="inv">Inventaris</option><option value="perb">Perawatan/Upgrade Aset</option><option value="bio">Biologis</option><option value="stok">Stok Barang</option><option value="invest">Instrumen Investasi</option><option value="biasa">Pengeluaran Biasa</option>
     </select></div>
     <div id="goals-list"></div>
   </main></div>
@@ -15862,11 +15872,22 @@ function goalPrioChip(g, mini){
 var GOAL_OPEN = {};
 function goalKey(g){ return String(g.id || (g.nama||'')+'|'+(g.tanggalTarget||'')); }
 function goalJenisOf(g){
-  if(g.jenis==='inv' || g.jenis==='bio' || g.jenis==='stok' || g.jenis==='invest' || g.jenis==='biasa') return g.jenis;
-  if(g.dibeli && (g.dibeli.tipe==='inv' || g.dibeli.tipe==='bio' || g.dibeli.tipe==='stok' || g.dibeli.tipe==='invest')) return g.dibeli.tipe;
+  if(g.jenis==='inv' || g.jenis==='perb' || g.jenis==='bio' || g.jenis==='stok' || g.jenis==='invest' || g.jenis==='biasa') return g.jenis;
+  if(g.dibeli && (g.dibeli.tipe==='inv' || g.dibeli.tipe==='perb' || g.dibeli.tipe==='bio' || g.dibeli.tipe==='stok' || g.dibeli.tipe==='invest')) return g.dibeli.tipe;
   return 'biasa';
 }
-function goalJenisLabel(j){ return j==='invest' ? 'Instrumen Investasi' : j==='inv' ? 'Inventaris' : (j==='bio' ? 'Aset Biologis' : (j==='stok' ? 'Stok Barang' : 'Pengeluaran Biasa')); }
+function goalJenisLabel(j){ return j==='invest' ? 'Instrumen Investasi' : j==='perb' ? 'Perawatan/Upgrade Aset' : j==='inv' ? 'Inventaris' : (j==='bio' ? 'Aset Biologis' : (j==='stok' ? 'Stok Barang' : 'Pengeluaran Biasa')); }
+/* Target untuk perawatan / upgrade aset inventaris yang sudah ada */
+function goalPerbAsetOptions(sel){
+  var byKat = {}, h = '<option value="">Pilih aset inventaris...</option>';
+  (DATA.inventaris||[]).forEach(function(x){ if(x && x.id && x.nama && !x.terjual && !x.dikeluarkan){ var k = x.kategori||'Lainnya'; (byKat[k] = byKat[k] || []).push(x); } });
+  Object.keys(byKat).sort().forEach(function(k){
+    h += '<optgroup label="'+escapeHtml(k)+'">'+byKat[k].sort(function(a,b){ return String(a.nama).localeCompare(String(b.nama)); }).map(function(x){ return '<option value="'+escapeHtml(x.id)+'"'+(x.id===sel?' selected':'')+'>'+escapeHtml(x.nama)+'</option>'; }).join('')+'</optgroup>';
+  });
+  return h;
+}
+function goalPerbItem(g){ return (DATA.inventaris||[]).filter(function(x){ return x.id===g.perbAsetId; })[0] || null; }
+function goalPerbNama(g){ var it = goalPerbItem(g); return (it ? it.nama : (g.perbAsetNama || 'aset tidak ditemukan'))+' ('+(g.perbTipe==='upgrade' ? 'upgrade' : 'perawatan')+')'; }
 /* Isi dropdown di form buat target (nilai yang sudah dipilih dipertahankan) */
 function goalFormFill(){
   var g = function(id){ return document.getElementById(id); };
@@ -15880,6 +15901,7 @@ function goalFormFill(){
   keep('goal-instrumen', INSTRUMEN_INVESTASI.map(function(x){ return '<option value="'+escapeHtml(x)+'">'+escapeHtml(x)+'</option>'; }).join(''));
   keep('goal-platform', '<option value="">(belum ditentukan)</option>'+platformInvestasiList().map(function(x){ return '<option value="'+escapeHtml(x)+'">'+escapeHtml(x)+'</option>'; }).join(''));
   if(g('goal-invest-wrap')) g('goal-invest-wrap').style.display = jenis==='invest' ? '' : 'none';
+  if(g('goal-perb-wrap')){ if(jenis==='perb') keep('goal-perb-aset', goalPerbAsetOptions('')); g('goal-perb-wrap').style.display = jenis==='perb' ? '' : 'none'; }
   var isAset = (jenis==='inv' || jenis==='bio' || jenis==='stok');
   if(isAset){
     keep('goal-pick', goalPickOptions(jenis, ''));
@@ -15930,6 +15952,12 @@ function tambahGoal(){
     } else {
       g.asetKat = document.getElementById('goal-kat').value;
     }
+  } else if(jenis==='perb'){
+    var pa = document.getElementById('goal-perb-aset').value;
+    if(!pa){ toast('Pilih aset inventaris yang mau dirawat/di-upgrade dulu'); return; }
+    var pit = (DATA.inventaris||[]).filter(function(x){ return x.id===pa; })[0];
+    g.perbAsetId = pa; g.perbAsetNama = pit ? pit.nama : '';
+    g.perbTipe = document.getElementById('goal-perb-tipe').value === 'upgrade' ? 'upgrade' : 'perawatan';
   } else if(jenis==='invest'){
     g.instrumen = document.getElementById('goal-instrumen').value;
     g.platform = document.getElementById('goal-platform').value;
@@ -15953,6 +15981,23 @@ function goalAutoKonversi(g){
   var rek = g.rekeningTujuan, harga = Math.round(g.terkumpul), id, nama = g.nama;
   if(!rek || !(harga>0)) return false;
   var ket = 'Dibeli dari target nabung "'+g.nama+'"', tipe = g.jenis;
+  if(tipe==='perb'){
+    var pit = goalPerbItem(g);
+    if(!pit || pit.terjual || pit.dikeluarkan){ toast(L('Aset inventaris untuk target "'+g.nama+'" tidak ditemukan. Edit targetnya dan pilih aset lagi.','The inventory asset for goal "'+g.nama+'" was not found. Edit the goal and pick the asset again.')); return false; }
+    id = genId('pb'); nama = pit.nama;
+    var prec = { id:id, tanggal:todayISO(), ket:g.nama, biaya:harga, tipe:(g.perbTipe==='upgrade' ? 'upgrade' : 'perawatan'), catat:true, rekening:rek, goalId:g.id };
+    if(!Array.isArray(pit.perbaikan)) pit.perbaikan = [];
+    pit.perbaikan.push(prec);
+    invPerbBuatPengeluaran(pit, prec, rek);
+    DATA.pengeluaran[DATA.pengeluaran.length-1].linkGoal = g.id;
+    g.dibeli = { tipe:'perb', itemId:pit.id, perbId:id, tanggal:todayISO(), harga:harga };
+    saveData();
+    toast(L('Lunas! Dibayar '+fmt(harga)+' dari '+rek+', dicatat sebagai '+(prec.tipe==='upgrade'?'upgrade':'perawatan')+' "'+pit.nama+'"','Paid off! Paid '+fmt(harga)+' from '+rek+', logged as '+prec.tipe+' for "'+pit.nama+'"'));
+    try{ renderPengeluaranList(); }catch(e){}
+    try{ renderInventarisFilterKategori(); renderInventarisList(); if(typeof INVD_ID!=='undefined' && INVD_ID===pit.id) renderInventarisDetail(); }catch(e){}
+    try{ if(typeof renderDashboard==='function') renderDashboard(); }catch(e){}
+    return true;
+  }
   if(tipe==='stok'){
     if(g.asetSumber==='master' && g.asetPick) nama = g.asetPick;
     var katS = goalPickKat('stok', nama) || g.asetKat || ((DATA.kategoriBelanja||[])[0]||'');
@@ -16059,6 +16104,7 @@ var GOAL_BUY = null; /* {idx, tipe, nama, harga, kat, rek} saat form bayar terbu
 function goalItemOf(g){
   if(!g.dibeli) return null;
   if(g.dibeli.tipe==='biasa') return { nama:g.nama, item:g.nama };
+  if(g.dibeli.tipe==='perb'){ var pi = (DATA.inventaris||[]).filter(function(x){ return x.id===g.dibeli.itemId; })[0]; return (pi && (pi.perbaikan||[]).some(function(p){ return p.id===g.dibeli.perbId; })) ? pi : null; }
   if(g.dibeli.tipe==='invest'){ var rb = (DATA.invbeli||[]).filter(function(x){ return x.id===g.dibeli.itemId; })[0]; return rb ? { nama:(rb.instrumen||'')+(rb.kode?' '+rb.kode:''), item:rb.kode||rb.instrumen } : null; }
   var list = g.dibeli.tipe==='bio' ? (DATA.asetbio||[]) : (g.dibeli.tipe==='stok' ? (DATA.belanja||[]) : (DATA.inventaris||[]));
   return list.filter(function(x){ return x.id===g.dibeli.itemId; })[0] || null;
@@ -16100,6 +16146,10 @@ function goalTercapaiHtml(g, i){
       return '<div style="color:var(--pos); font-weight:700; font-size:12.5px; margin-top:8px;">✅ Lunas dan sudah dibayar ('+fmt(g.dibeli.harga)+'), tercatat sebagai Pengeluaran'+(g.jenisPg?': '+escapeHtml(g.jenisPg):'')+'</div>'+
         '<div data-goto="riwayat" style="margin-top:6px; font-size:12.5px; font-weight:700; color:var(--primary); cursor:pointer;">Lihat di Riwayat ›</div>';
     }
+    if(g.dibeli.tipe==='perb'){
+      return '<div style="color:var(--pos); font-weight:700; font-size:12.5px; margin-top:8px;">✅ Lunas dan sudah dibayar ('+fmt(g.dibeli.harga)+'), tercatat sebagai '+(g.perbTipe==='upgrade'?'Upgrade':'Perawatan')+' aset: '+escapeHtml(item.nama||'')+'</div>'+
+        '<div onclick="bukaInventarisDetail(\''+escapeHtml(item.id)+'\')" style="margin-top:6px; font-size:12.5px; font-weight:700; color:var(--primary); cursor:pointer;">Lihat di Catatan Perbaikan aset ›</div>';
+    }
     if(g.dibeli.tipe==='invest'){
       return '<div style="color:var(--pos); font-weight:700; font-size:12.5px; margin-top:8px;">✅ Sudah dibeli ('+fmt(g.dibeli.harga)+') dan tercatat sebagai Pembelian Investasi: '+escapeHtml(item.nama)+'</div>'+
         '<div data-goto="investasi-beli" style="margin-top:6px; font-size:12.5px; font-weight:700; color:var(--primary); cursor:pointer;">Lihat di Pembelian Investasi ›</div>';
@@ -16110,6 +16160,9 @@ function goalTercapaiHtml(g, i){
       '<div data-goto="'+(isStok?'stok-barang':(isBio?'asetbio':'inventaris'))+'" style="margin-top:6px; font-size:12.5px; font-weight:700; color:var(--primary); cursor:pointer;">Lihat di daftar '+lbl+' ›</div>';
   }
   var h = '<div style="color:var(--pos); font-weight:700; font-size:12.5px; margin-top:8px;">🎉 Target tercapai!</div>';
+  if(g.jenis==='perb'){
+    return h + '<div class="meta" style="margin-top:6px;">Aset inventaris atau catatan perbaikan untuk target ini tidak ditemukan (aset dijual/dihapus, atau catatannya dihapus). Tekan Edit, pilih aset lagi, lalu simpan agar biayanya tercatat ulang.</div>';
+  }
   if(GOAL_BUY && GOAL_BUY.idx===i){
     var b = GOAL_BUY, kunci = !!g.rekeningTujuan, rek = kunci ? g.rekeningTujuan : (b.rek || '');
     h += '<div style="margin-top:12px; padding:12px; border-radius:14px; background:var(--primary-dim);">'+
@@ -16226,12 +16279,12 @@ function goalEditOpen(idx){
   GOAL_BUY = null;
   GOAL_EDIT = { idx:idx, nama:g.nama, target:Math.round(g.target).toLocaleString('id-ID'), tanggal:g.tanggalTarget||'', jenis:g.jenis||goalJenisOf(g),
     sumber:g.asetSumber||'baru', pick:g.asetPick||'', kat:g.asetKat||'', qty:String(g.stokQty||1), satuan:g.stokSatuan||'Pcs',
-    untuk:g.untuk||'', jenisPg:g.jenisPg||'', instrumen:g.instrumen||'', platform:g.platform||'', kode:g.kode||'', rekTujuan:g.rekeningTujuan||'', rekAsal:goalSumberAkun(g), prio:goalPrioOf(g) };
+    untuk:g.untuk||'', jenisPg:g.jenisPg||'', instrumen:g.instrumen||'', platform:g.platform||'', kode:g.kode||'', rekTujuan:g.rekeningTujuan||'', rekAsal:goalSumberAkun(g), prio:goalPrioOf(g), perbAsetId:g.perbAsetId||'', perbTipe:g.perbTipe||'perawatan' };
   renderGoals();
 }
 function goalEditReadDraft(){
   if(!GOAL_EDIT) return;
-  var map = { nama:'ge-nama', target:'ge-target', tanggal:'ge-tanggal', jenis:'ge-jenis', sumber:'ge-sumber', pick:'ge-pick', kat:'ge-kat', qty:'ge-qty', satuan:'ge-satuan', untuk:'ge-untuk', jenisPg:'ge-jenispg', instrumen:'ge-instrumen', platform:'ge-platform', kode:'ge-kode', rekTujuan:'ge-rek-tujuan', rekAsal:'ge-rek-asal', prio:'ge-prio' };
+  var map = { nama:'ge-nama', target:'ge-target', tanggal:'ge-tanggal', jenis:'ge-jenis', sumber:'ge-sumber', pick:'ge-pick', kat:'ge-kat', qty:'ge-qty', satuan:'ge-satuan', untuk:'ge-untuk', jenisPg:'ge-jenispg', instrumen:'ge-instrumen', platform:'ge-platform', kode:'ge-kode', rekTujuan:'ge-rek-tujuan', rekAsal:'ge-rek-asal', prio:'ge-prio', perbAsetId:'ge-perb-aset', perbTipe:'ge-perb-tipe' };
   Object.keys(map).forEach(function(k){ var el = document.getElementById(map[k]); if(el) GOAL_EDIT[k] = el.value; });
 }
 function goalEditHtml(g, i){
@@ -16242,7 +16295,7 @@ function goalEditHtml(g, i){
     fld('Nama target','<input type="text" id="ge-nama" maxlength="24" value="'+escapeHtml(d.nama)+'">')+
     fld('Jumlah target (Rp)','<input type="text" class="money-input" id="ge-target" inputmode="numeric" value="'+escapeHtml(d.target)+'"'+(dibeli?' disabled':'')+'>');
   if(!dibeli){
-    h += fld('Setelah lunas jadi','<select id="ge-jenis"><option value="biasa"'+(d.jenis==='biasa'?' selected':'')+'>Pengeluaran Biasa</option><option value="inv"'+(d.jenis==='inv'?' selected':'')+'>Aset Inventaris</option><option value="bio"'+(d.jenis==='bio'?' selected':'')+'>Aset Biologis</option><option value="stok"'+(d.jenis==='stok'?' selected':'')+'>Stok Barang</option><option value="invest"'+(d.jenis==='invest'?' selected':'')+'>Instrumen Investasi</option></select>');
+    h += fld('Setelah lunas jadi','<select id="ge-jenis"><option value="biasa"'+(d.jenis==='biasa'?' selected':'')+'>Pengeluaran Biasa</option><option value="inv"'+(d.jenis==='inv'?' selected':'')+'>Aset Inventaris</option><option value="perb"'+(d.jenis==='perb'?' selected':'')+'>Perawatan / Upgrade Aset Inventaris</option><option value="bio"'+(d.jenis==='bio'?' selected':'')+'>Aset Biologis</option><option value="stok"'+(d.jenis==='stok'?' selected':'')+'>Stok Barang</option><option value="invest"'+(d.jenis==='invest'?' selected':'')+'>Instrumen Investasi</option></select>');
     if(d.jenis==='inv' || d.jenis==='bio' || d.jenis==='stok'){
       var stok = d.jenis==='stok';
       h += fld('Asetnya','<select id="ge-sumber"><option value="baru"'+(d.sumber==='baru'?' selected':'')+'>'+(stok?'Item baru (belum ada di master stok)':'Aset baru (belum ada di master data)')+'</option><option value="master"'+(d.sumber==='master'?' selected':'')+'>'+(stok?'Item yang sudah ada di master stok':'Aset yang sudah ada di master data')+'</option></select>');
@@ -16250,6 +16303,9 @@ function goalEditHtml(g, i){
       else h += fld(d.jenis==='bio'?'Jenis':'Kategori','<select id="ge-kat">'+goalKatOptions(d.jenis, d.kat)+'</select>');
       if(stok) h += '<div style="display:flex; gap:8px; margin-bottom:10px;"><div class="field" style="flex:1; margin:0;"><label>Qty yang dibeli</label><input type="number" id="ge-qty" inputmode="decimal" min="0" step="any" value="'+escapeHtml(d.qty)+'"></div>'+
         '<div class="field" style="flex:1; margin:0;"><label>Satuan</label><select id="ge-satuan">'+opt(SATUAN_BELANJA, d.satuan)+'</select></div></div>';
+    } else if(d.jenis==='perb'){
+      h += fld('Aset inventaris','<select id="ge-perb-aset">'+goalPerbAsetOptions(d.perbAsetId)+'</select>')+
+        fld('Jenis biaya','<select id="ge-perb-tipe"><option value="perawatan"'+(d.perbTipe!=='upgrade'?' selected':'')+'>Perawatan (biaya saja, nilai aset tetap)</option><option value="upgrade"'+(d.perbTipe==='upgrade'?' selected':'')+'>Upgrade (menambah Estimasi Harga Wajar aset)</option></select>');
     } else if(d.jenis==='invest'){
       if(!d.instrumen) d.instrumen = INSTRUMEN_INVESTASI[0];
       h += fld('Instrumen investasi','<select id="ge-instrumen">'+opt(INSTRUMEN_INVESTASI, d.instrumen)+'</select>')+
@@ -16293,13 +16349,17 @@ function goalEditSimpan(idx){
         if(!(qty>0)){ toast('Isi qty yang dibeli dulu'); return; }
         upd.stokQty = qty; upd.stokSatuan = d.satuan || 'Pcs';
       }
+    } else if(jenis==='perb'){
+      if(!d.perbAsetId){ toast('Pilih aset inventaris dulu'); return; }
+      var pit2 = (DATA.inventaris||[]).filter(function(x){ return x.id===d.perbAsetId; })[0];
+      upd.perbAsetId = d.perbAsetId; upd.perbAsetNama = pit2 ? pit2.nama : ''; upd.perbTipe = d.perbTipe==='upgrade' ? 'upgrade' : 'perawatan';
     } else if(jenis==='invest'){ upd.instrumen = d.instrumen || INSTRUMEN_INVESTASI[0]; upd.platform = d.platform || ''; upd.kode = (d.kode||'').trim(); }
     else { upd.untuk = d.untuk; upd.jenisPg = d.jenisPg; }
   }
   g.nama = nama; g.tanggalTarget = d.tanggal||''; g.prio = GOAL_PRIO[d.prio] ? d.prio : 'perlu';
   if(!dibeli){
     g.target = target; g.jenis = jenis;
-    ['asetSumber','asetPick','asetKat','stokQty','stokSatuan','untuk','jenisPg','instrumen','platform','kode'].forEach(function(k){ delete g[k]; });
+    ['asetSumber','asetPick','asetKat','stokQty','stokSatuan','untuk','jenisPg','instrumen','platform','kode','perbAsetId','perbAsetNama','perbTipe'].forEach(function(k){ delete g[k]; });
     Object.keys(upd).forEach(function(k){ g[k] = upd[k]; });
     if(g.terkumpul<=0) g.rekeningTujuan = rekTujuan;
   }
@@ -16312,7 +16372,7 @@ function goalEditSimpan(idx){
 }
 /* Ringkasan total target nabung: keseluruhan + per kategori (klik baris = filter kelompok) */
 function goalRingkasanHtml(){
-  var cats = [['inv','Inventaris'],['bio','Aset Biologis'],['stok','Stok Barang'],['invest','Instrumen Investasi'],['biasa','Pengeluaran Biasa']];
+  var cats = [['inv','Inventaris'],['perb','Perawatan/Upgrade Aset'],['bio','Aset Biologis'],['stok','Stok Barang'],['invest','Instrumen Investasi'],['biasa','Pengeluaran Biasa']];
   function hitung(list){
     var t=0, k=0, n=list.length, done=0;
     list.forEach(function(g){ t+=(g.target||0); k+=Math.min(g.terkumpul||0, g.target||0); if((g.terkumpul||0)>=(g.target||0)) done++; });
@@ -16360,9 +16420,9 @@ function renderGoals(){
   goalFormFill();
   var fsel = document.getElementById('goal-filter');
   if(fsel){
-    var cnt = { inv:0, bio:0, stok:0, invest:0, biasa:0 };
+    var cnt = { inv:0, perb:0, bio:0, stok:0, invest:0, biasa:0 };
     DATA.goals.forEach(function(x){ cnt[goalJenisOf(x)]++; });
-    fsel.innerHTML = '<option value="semua">Semua ('+DATA.goals.length+')</option><option value="inv">Inventaris ('+cnt.inv+')</option><option value="bio">Biologis ('+cnt.bio+')</option><option value="stok">Stok Barang ('+cnt.stok+')</option><option value="invest">Instrumen Investasi ('+cnt.invest+')</option><option value="biasa">Pengeluaran Biasa ('+cnt.biasa+')</option>';
+    fsel.innerHTML = '<option value="semua">Semua ('+DATA.goals.length+')</option><option value="inv">Inventaris ('+cnt.inv+')</option><option value="perb">Perawatan/Upgrade Aset ('+cnt.perb+')</option><option value="bio">Biologis ('+cnt.bio+')</option><option value="stok">Stok Barang ('+cnt.stok+')</option><option value="invest">Instrumen Investasi ('+cnt.invest+')</option><option value="biasa">Pengeluaran Biasa ('+cnt.biasa+')</option>';
     fsel.value = GOAL_FILTER;
   }
   function goalStatus(g){ return g.dibeli ? 'Sudah dibeli' : (g.terkumpul>=g.target ? 'Tercapai' : 'Berjalan'); }
@@ -16396,7 +16456,7 @@ function renderGoals(){
         '<div style="flex:1; min-width:0;">'+
         '<div class="goal-chips"><span class="goal-chip">⚑ Prioritas: <b>'+GOAL_PRIO[goalPrioOf(g)].l+'</b></span><span class="goal-chip"><span>📅</span><span>'+(g.tanggalTarget ? 'Target: '+escapeHtml(g.tanggalTarget) : 'Tanpa tenggat waktu')+'</span></span>'+
         (g.rekeningTujuan ? '<span class="goal-chip">💰 Kantong: '+escapeHtml(accountOptionLabel(g.rekeningTujuan))+'</span>' : '')+
-        '<span class="goal-chip">🏷️ '+goalJenisLabel(goalJenisOf(g))+(g.jenis==='invest' ? ' · '+escapeHtml((g.instrumen||'')+(g.kode?' '+g.kode:'')) : g.jenis && g.jenis!=='biasa' ? (g.asetSumber==='master' ? ' · '+escapeHtml(g.asetPick||'') : ' · aset baru') : '')+'</span></div>'+
+        '<span class="goal-chip">🏷️ '+goalJenisLabel(goalJenisOf(g))+(g.jenis==='invest' ? ' · '+escapeHtml((g.instrumen||'')+(g.kode?' '+g.kode:'')) : g.jenis==='perb' ? ' · '+escapeHtml(goalPerbNama(g)) : g.jenis && g.jenis!=='biasa' ? (g.asetSumber==='master' ? ' · '+escapeHtml(g.asetPick||'') : ' · aset baru') : '')+'</span></div>'+
         '</div>'+
         '<div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;"><span class="goal-del" data-goal-action="hapus" data-goal-idx="'+i+'">Hapus</span>'+
         '<span class="goal-del" data-goal-action="edit-buka" data-goal-idx="'+i+'" style="color:var(--primary); border-color:var(--primary);">Edit</span></div>'+
