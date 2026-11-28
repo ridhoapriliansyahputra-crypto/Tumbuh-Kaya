@@ -3211,6 +3211,7 @@ html #view-dividen#view-dividen#view-dividen #dv-list .txn-row.v2{border-left:4p
   <div class="view" id="view-pengaturan"><main>
     <div class="section-title"><span data-icon="idCard"></span>Detail Akun</div>
     <div class="pg-cols"><div class="pg-l"><div class="card">
+      <div class="pf-cover-band" aria-hidden="true"></div>
       <div class="profile-cover-btns">
         <span class="pc-btn" data-akun-action="pilih-sampul" role="button" aria-label="Ubah foto sampul"><span data-icon="camera"></span></span>
         <span class="pc-btn" id="profil-hapus-sampul" data-akun-action="hapus-sampul" role="button" aria-label="Hapus foto sampul" style="display:none;"><span data-icon="trash"></span></span>
@@ -6352,6 +6353,7 @@ function applyDataDefaultsCore(){
   if(!DATA.kategoriInvSusutV2){ KATEGORI_INVENTARIS.forEach(function(k){ if(DATA.kategoriInventaris.indexOf(k)<0) DATA.kategoriInventaris.push(k); }); DATA.kategoriInvSusutV2 = true; }
   if(!DATA.tempatBeliInventaris) DATA.tempatBeliInventaris = [];
   if(!DATA.lokasiInventaris) DATA.lokasiInventaris = [];
+  if(!Array.isArray(DATA.kartu)) DATA.kartu = []; /* Kartu ATM: default kosong, harus di-add dulu */
   if(!DATA.lokasiInventarisMaps) DATA.lokasiInventarisMaps = {};
   // Migrasi data lama: link Google Maps yang dulu diisi manual per-aset dipindah jadi satu link per lokasi
   // di database lokasi, biar ke depannya cukup diisi sekali dan otomatis kepakai di semua aset senama lokasi.
@@ -13903,7 +13905,7 @@ function renderMutasiRekening(){
   if(!acc){ go('dashboard'); return; }
   document.getElementById('mr-badge').innerHTML = accountBadgeHtml(acc);
   var mrc = document.getElementById('mr-card');
-  if(mrc){ if(accCardImg(acc)){ var ci = accCardInner(acc,' wl-static'); mrc.innerHTML = '<div class="wl-card'+ci.cls+'" style="'+ci.style+'">'+ci.html+'</div>'; } else { mrc.innerHTML = ''; } }
+  if(mrc){ if(kartuOf(acc)){ var ci = accCardInner(acc,' wl-static'); mrc.innerHTML = '<div class="wl-card'+ci.cls+'" style="'+ci.style+'">'+ci.html+'</div>'; } else { mrc.innerHTML = ''; } }
   document.getElementById('mr-nama').textContent = acc;
   document.getElementById('mr-saldo').textContent = maskOrFmt(saldoAkun(acc));
 
@@ -29840,6 +29842,9 @@ html[data-theme="light"] #view-investasi-beli main > .section-title > [data-icon
 html[data-theme="light"] #view-investasi-beli main > .pf-card, html[data-theme="light"] #view-investasi-jual main > .pf-card{background:#FFFFFF !important; border-color:#D4D4D4 !important;}
 html[data-theme="light"] #view-investasi-beli .pf-card .pf-hero, html[data-theme="light"] #view-investasi-jual .pf-card .pf-hero{background:linear-gradient(135deg,rgba(15,157,142,.13),rgba(139,124,246,.10)); border-color:rgba(15,157,142,.35);}
 html[data-theme="light"] #view-investasi-beli .pf-card .pf-d, html[data-theme="light"] #view-investasi-jual .pf-card .pf-d{background:#F6F6F3; border-color:#DDDDD8; border-left-color:var(--c,#BFBFB8);}
+/* Mode terang: warna aksen terang tetap dipakai sebagai teks, tapi kotaknya dibuat gelap agar kontras. */
+html[data-theme="light"] .pf-d .pf-av, html[data-theme="light"] .pf-d .pf-unit{background:color-mix(in srgb,var(--c) 26%,#1A1A1A); color:var(--c); box-shadow:none;}
+html[data-theme="light"] .pf-d .pf-v small{display:inline-block; background:color-mix(in srgb,var(--c) 26%,#1A1A1A); color:var(--c); padding:2px 8px; border-radius:99px; font-weight:700;}
 </style>
 <style id="tk-inv2-color">
 /* Inventaris Aset & Budget Belanja: sentuhan teal (satu warna) */
@@ -30211,13 +30216,14 @@ function renderSaldoRekeningPage(){
   if(!body) body = '<div class="empty">'+L('Belum ada rekening di kategori ini.','No accounts in this category yet.')+'</div>';
   var toggle = srToggleHtml(srv);
   if(srv==='kartu'){
-    var cardList = list.filter(function(a){ return accCardImg(a); });
+    var cardList = list.filter(function(a){ return kartuOf(a); });
     var rest = list.filter(function(a){ return cardList.indexOf(a)<0; });
     var shown = (cardList.length>SR_MAXC && !SR_ALL) ? cardList.slice(0,SR_MAXC) : cardList;
     var more = cardList.length>SR_MAXC ? '<button type="button" class="sr-chip wl-more" onclick="srToggleAll()">'+(SR_ALL ? L('Ringkas','Show less') : L('Lihat semua','View all')+' ('+cardList.length+')')+'</button>' : '';
-    var restHtml = rest.length ? '<div class="sr-gh" style="margin-top:16px;"><span>'+L('Rekening lainnya','Other accounts')+'<small>'+rest.length+' '+L('rekening','accounts')+'</small></span></div>'+'<div class="sr-rest">'+rest.map(function(a){ return rowHtml[a] || ''; }).join('')+'</div>' : '';
-    var stackHtml = shown.length ? srWalletHtml(shown)+more : '';
-    if(!shown.length && !rest.length) stackHtml = '<div class="empty">'+L('Belum ada rekening di kategori ini.','No accounts in this category yet.')+'</div>';
+    var restHtml = (cardList.length && rest.length) ? '<div class="sr-gh" style="margin-top:16px;"><span>'+L('Rekening lainnya','Other accounts')+'<small>'+rest.length+' '+L('rekening','accounts')+'</small></span></div>'+'<div class="sr-rest">'+rest.map(function(a){ return rowHtml[a] || ''; }).join('')+'</div>' : '';
+    var addBtn = '<button type="button" class="sr-chip kt-add" onclick="kartuBuka()">+ '+L('Tambah Kartu','Add Card')+'</button>';
+    var stackHtml = shown.length ? '<div class="kt-bar">'+addBtn+'</div>'+srWalletHtml(shown)+more :
+      '<div class="kt-emptycard"><div class="kt-ec-ic">\uD83D\uDCB3</div><b>'+L('Belum ada kartu','No cards yet')+'</b><span>'+L('Kartu ATM kamu tampil di sini setelah ditambahkan. Caranya: tambah rekening dulu (mis. BNI) di Atur \u203a Kelola Rekening, lalu tekan Tambah Kartu dan pilih rekening serta desain kartunya.','Your ATM cards show up here once added. First add the account (e.g. BNI) in Settings \u203a Manage Accounts, then tap Add Card and pick the account and card design.')+'</span><div class="kt-ec-btns"><button type="button" class="kt-ec-pri" onclick="kartuBuka()">+ '+L('Tambah Kartu','Add Card')+'</button><button type="button" class="kt-ec-sec" onclick="go(\'edit-saldo-awal\')">'+L('Tambah Rekening','Add Account')+'</button></div></div>';
     box.innerHTML = sum+chips+toggle+stackHtml+restHtml;
     if(shown.length) srWalletInit(shown);
     return;
@@ -30239,12 +30245,90 @@ function srToggleHtml(v){
     return '<button type="button" class="sr-chip'+(k===v?' on':'')+'" onclick="srSetView(\''+k+'\')">'+(k==='kartu' ? L('Kartu','Cards') : L('Daftar','List'))+'</button>';
   }).join('')+'</div>';
 }
-function accCardImg(acc){ return ACCOUNT_CARD_IMG[acc] || ''; }
-function accCardInner(acc, extraCls){
-  var bd = getAccountBadge(acc) || {}, img = accCardImg(acc), v = saldoAkun(acc);
-  var bg = img ? 'background-image:url('+img+');' : 'background:linear-gradient(135deg, rgba(255,255,255,.20), rgba(0,0,0,.22)), '+(bd.bg||'#3a3a3a')+';';
+/* ===== Kartu ATM: default kosong, harus di-add dulu (pilih rekening -> pilih desain kartu) ===== */
+function kartuOf(acc){ var r = rootOf(acc); return (DATA.kartu||[]).filter(function(k){ return k.acc===r; })[0] || null; }
+function kartuImgOf(acc){ return ACCOUNT_CARD_IMG[acc] || ACCOUNT_CARD_IMG[rootOf(acc)] || ''; }
+function accCardImg(acc){ var k = kartuOf(acc); return (k && (k.desain||'resmi')==='resmi') ? kartuImgOf(acc) : ''; }
+function accCardBuild(acc, k, extraCls){
+  var bd = getAccountBadge(acc) || {}, v = saldoAkun(acc), ds = (k && k.desain) || 'merek';
+  var img = ds==='resmi' ? kartuImgOf(acc) : '';
+  var bg, extra = '';
+  if(img) bg = 'background-image:url('+img+');';
+  else if(ds==='gelap') bg = 'background:linear-gradient(135deg,#34343a,#0c0c0e);';
+  else if(ds==='terang'){ bg = 'background:linear-gradient(135deg,#ffffff,#d6d6d0);'; extra = ' wl-light'; }
+  else bg = 'background:linear-gradient(135deg, rgba(255,255,255,.20), rgba(0,0,0,.22)), '+(bd.bg||'#3a3a3a')+';';
   var art = img ? '' : '<span class="wl-chip"></span><span class="wl-cat">'+escapeHtml(REK_KAT_LABEL[ACCOUNT_CATEGORY[acc]||'bank']||'')+'</span>';
-  return {style:bg, html:'<div class="wl-hd">'+dcAccBadge(acc)+'<span class="wl-nm">'+escapeHtml(acc)+'</span><span class="wl-bl'+(v<0 && !saldoHidden ? ' neg' : '')+'">'+maskOrFmt(v)+'</span></div>'+art, cls:(img?'':' wl-auto')+(extraCls||'')};
+  var l4 = k && k.last4 ? '<span class="wl-num">\u2022\u2022\u2022\u2022 '+escapeHtml(k.last4)+'</span>' : '';
+  return {style:bg, html:'<div class="wl-hd">'+dcAccBadge(acc)+'<span class="wl-nm">'+escapeHtml(acc)+'</span><span class="wl-bl'+(v<0 && !saldoHidden ? ' neg' : '')+'">'+maskOrFmt(v)+'</span></div>'+art+l4, cls:(img?'':' wl-auto')+extra+(extraCls||'')};
+}
+function accCardInner(acc, extraCls){ return accCardBuild(acc, kartuOf(acc), extraCls); }
+
+var KT_ST = { acc:'', desain:'', last4:'', edit:false };
+var KT_DESAIN = [['resmi','Kartu resmi','Official card'],['merek','Warna bank','Bank color'],['gelap','Hitam','Black'],['terang','Putih','White']];
+function kartuKandidat(){
+  var sudah = (DATA.kartu||[]).map(function(k){ return k.acc; });
+  return accountsAktif().filter(function(a){
+    if(isChildAccountEntry(a)) return false;
+    var c = ACCOUNT_CATEGORY[a]||'bank';
+    return (c==='bank' || c==='ewallet') && sudah.indexOf(a)<0;
+  });
+}
+function kartuDesainDefault(acc){ return kartuImgOf(acc) ? 'resmi' : 'merek'; }
+function kartuBuka(editAcc){
+  var k = editAcc ? kartuOf(editAcc) : null;
+  KT_ST = k ? { acc:k.acc, desain:k.desain||kartuDesainDefault(k.acc), last4:k.last4||'', edit:true } : { acc:'', desain:'', last4:'', edit:false };
+  var ov = document.getElementById('kt-ov');
+  if(!ov){ ov = document.createElement('div'); ov.id = 'kt-ov'; ov.className = 'kt-ov'; ov.addEventListener('click', function(e){ if(e.target===ov) kartuTutup(); }); document.body.appendChild(ov); }
+  ov.classList.add('show'); kartuRender();
+}
+function kartuTutup(){ var ov = document.getElementById('kt-ov'); if(ov) ov.classList.remove('show'); }
+function kartuPilihAcc(a){ KT_ST.acc = a; KT_ST.desain = a ? kartuDesainDefault(a) : ''; kartuRender(); }
+function kartuPilihDesain(d){ KT_ST.desain = d; kartuRender(); }
+function kartuRender(){
+  var ov = document.getElementById('kt-ov'); if(!ov) return;
+  var cand = KT_ST.edit ? [KT_ST.acc] : kartuKandidat(), h = '';
+  h += '<div class="kt-sheet"><div class="kt-hd"><b>'+(KT_ST.edit ? L('Ubah Kartu','Edit Card') : L('Tambah Kartu','Add Card'))+'</b><button type="button" class="kt-x" onclick="kartuTutup()" aria-label="'+L('Tutup','Close')+'">\u2715</button></div>';
+  if(!cand.length){
+    h += '<div class="kt-empty">'+L('Belum ada rekening bank atau e-wallet yang bisa ditambah kartunya. Tambah rekening dulu (misalnya BNI) di Atur \u203a Kelola Rekening, lalu kembali ke sini untuk menambah kartunya.','No bank or e-wallet account is available for a card yet. Add the account first (for example BNI) in Settings \u203a Manage Accounts, then come back to add its card.')+'</div>'+
+      '<button type="button" class="btn" onclick="kartuTutup(); go(\'edit-saldo-awal\');">'+L('Tambah Rekening','Add Account')+'</button></div>';
+    ov.innerHTML = h; return;
+  }
+  h += '<div class="kt-step"><span>1</span>'+L('Pilih rekening','Choose account')+'</div>';
+  h += '<select class="kt-sel" '+(KT_ST.edit ? 'disabled ' : '')+'onchange="kartuPilihAcc(this.value)"><option value="">'+L('Pilih rekening (mis. BNI)...','Choose account (e.g. BNI)...')+'</option>'+cand.map(function(a){ return '<option value="'+escapeHtml(a)+'"'+(a===KT_ST.acc?' selected':'')+'>'+escapeHtml(a)+'</option>'; }).join('')+'</select>';
+  if(KT_ST.acc){
+    var opts = KT_DESAIN.filter(function(d){ return d[0]!=='resmi' || kartuImgOf(KT_ST.acc); });
+    h += '<div class="kt-step"><span>2</span>'+L('Pilih desain kartu','Choose card design')+'</div><div class="kt-grid">'+opts.map(function(d){
+      var c = accCardBuild(KT_ST.acc, { desain:d[0], last4:KT_ST.last4 }, ' wl-static');
+      return '<button type="button" class="kt-tile'+(KT_ST.desain===d[0]?' on':'')+'" onclick="kartuPilihDesain(\''+d[0]+'\')"><div class="wl-card'+c.cls+'" style="'+c.style+'">'+c.html+'</div><span>'+L(d[1],d[2])+'</span></button>';
+    }).join('')+'</div>';
+    h += '<div class="kt-step"><span>3</span>'+L('4 digit terakhir kartu (opsional)','Last 4 digits of card (optional)')+'</div>'+
+      '<input type="text" class="kt-in" inputmode="numeric" maxlength="4" placeholder="1234" value="'+escapeHtml(KT_ST.last4)+'" oninput="this.value=this.value.replace(/\\D/g,\'\'); KT_ST.last4=this.value;" onchange="kartuRender()">'+
+      '<div class="kt-note">'+L('Cukup 4 digit terakhir. Jangan isi nomor kartu lengkap, PIN, atau CVV.','Last 4 digits only. Never enter the full card number, PIN, or CVV.')+'</div>';
+    h += '<button type="button" class="btn" onclick="kartuSimpan()">'+(KT_ST.edit ? L('Simpan Perubahan','Save Changes') : L('Tambah Kartu','Add Card'))+'</button>';
+  }
+  h += '</div>'; ov.innerHTML = h;
+}
+function kartuSimpan(){
+  var a = KT_ST.acc; if(!a){ toast(L('Pilih rekening dulu','Choose an account first')); return; }
+  var l4 = String(KT_ST.last4||'').replace(/\D/g,'');
+  if(l4 && l4.length!==4){ toast(L('Isi tepat 4 digit terakhir, atau kosongkan','Enter exactly 4 digits, or leave it empty')); return; }
+  if(!Array.isArray(DATA.kartu)) DATA.kartu = [];
+  var k = (DATA.kartu||[]).filter(function(x){ return x.acc===a; })[0];
+  if(k){ k.desain = KT_ST.desain || kartuDesainDefault(a); k.last4 = l4; }
+  else DATA.kartu.push({ id:genId('kt'), acc:a, desain:KT_ST.desain || kartuDesainDefault(a), last4:l4 });
+  saveData(); kartuTutup();
+  srFilter = ACCOUNT_CATEGORY[a] || 'bank'; SR_SEL = activeAccountFor(a);
+  try{ renderSaldoRekeningPage(); }catch(e){}
+  toast(L('Kartu '+a+' tersimpan','Card '+a+' saved'));
+}
+function kartuHapus(acc){
+  var k = kartuOf(acc); if(!k) return;
+  showConfirm(L('Hapus kartu "'+k.acc+'" dari daftar? Rekeningnya tidak ikut terhapus, saldo dan transaksinya tetap aman.','Remove the "'+k.acc+'" card from the list? The account itself stays, with its balance and transactions.'), function(){
+    DATA.kartu = (DATA.kartu||[]).filter(function(x){ return x.acc!==k.acc; });
+    saveData(); SR_SEL = null;
+    try{ renderSaldoRekeningPage(); }catch(e){}
+    toast(L('Kartu dihapus','Card removed'));
+  }, L('Ya, Hapus Kartu','Yes, Remove Card'));
 }
 function srWalletHtml(list){
   var accs = list.map(function(a){ return activeAccountFor(a); });
@@ -30316,6 +30400,7 @@ function srWalletDetail(acc){
       '<div class="wl-pn-bal'+(saldo<0 && !saldoHidden ? ' neg' : '')+'">'+maskOrFmt(saldo)+'</div></div></div>'+
     '<div class="wl-sum"><div><span>'+L('Masuk bulan ini','In this month')+'</span><b class="pos">'+maskOrFmt(masuk)+'</b></div><div><span>'+L('Keluar bulan ini','Out this month')+'</span><b class="neg">'+maskOrFmt(keluar)+'</b></div></div>'+
     '<div class="wl-act"><button type="button" class="pri" onclick="go(\'transfer\')">Transfer</button><button type="button" onclick="go(\'masuk\')">'+L('Catat masuk','Add income')+'</button><button type="button" onclick="go(\'keluar\')">'+L('Catat keluar','Add expense')+'</button></div>'+
+    '<div class="kt-row"><button type="button" data-acc="'+escapeHtml(acc)+'" onclick="kartuBuka(this.getAttribute(\'data-acc\'))">'+L('Ubah kartu','Edit card')+'</button><button type="button" class="danger" data-acc="'+escapeHtml(acc)+'" onclick="kartuHapus(this.getAttribute(\'data-acc\'))">'+L('Hapus kartu','Remove card')+'</button></div>'+
     '<div class="wl-pn-title"><span>'+L('Transaksi terakhir','Recent activity')+'</span><button type="button" onclick="openMutasiRekening(SR_SEL)">'+L('Mutasi lengkap','All activity')+' \u203a</button></div>'+
     '<div class="wl-txs">'+rows+'</div></div>';
   srCardColor(acc, function(hex){
@@ -31239,15 +31324,15 @@ html[data-theme="light"] #db-compact > .dc-t:has(.dc-ok){--ac:#19B894;} /* kondi
     var thisMonth = isCur ? monthly[now.getMonth()] : null;
     $('dv-sum').innerHTML =
       '<div class="dv-lbl">Dividen bersih '+esc(dvYear)+'</div>'+
-      '<div class="dv-big mono" style="color:#3FAE4C;">'+fmt(neto)+'</div>'+(deltaHtml ? '<div style="font-size:12px; margin-top:2px;">'+deltaHtml+'</div>' : '')+
+      '<div class="dv-big mono'+(neto>0 ? '' : ' dv-zero')+'">'+fmt(neto)+'</div>'+(deltaHtml ? '<div style="font-size:12px; margin-top:2px;">'+deltaHtml+'</div>' : '')+
       '<div class="dv-stats">'+
         '<div class="dv-stat"><span class="dv-lbl">Rata-rata / bulan</span><b class="mono">'+fmt(avg)+'</b></div>'+
         '<div class="dv-stat"><span class="dv-lbl">'+(isCur ? 'Bulan ini' : 'Jumlah pembayaran')+'</span><b class="mono">'+(isCur ? fmt(thisMonth) : yr.length+'x')+'</b></div>'+
         '<div class="dv-stat"><span class="dv-lbl">Kotor</span><b class="mono">'+fmt(bruto)+'</b></div>'+
         '<div class="dv-stat"><span class="dv-lbl">Pajak dipotong</span><b class="mono">'+fmt(pajak)+'</b></div>'+
       '</div>'+
-      '<div class="dv-bars">'+bars+'</div>'+
-      (rows ? '<div class="dv-sub">Per saham</div>'+rows : '<div class="empty" style="margin-top:10px;">Belum ada dividen di '+esc(dvYear)+'.</div>');
+      (rows ? '<div class="dv-bars">'+bars+'</div><div class="dv-sub">Per saham</div>'+rows
+        : '<div class="dv-empty"><b>'+L('Belum ada dividen di '+dvYear,'No dividends yet in '+dvYear)+'</b><span>'+L('Catat dividen yang masuk, nanti grafik bulanan dan rincian per saham muncul di sini.','Record incoming dividends and the monthly chart and per-stock breakdown will show up here.')+'</span><button type="button" class="dv-empty-btn" onclick="var f=document.getElementById(\'dv-form-title\'); if(f&&f.closest) f.closest(\'.card\').scrollIntoView({behavior:\'smooth\',block:\'start\'});">'+L('Catat dividen pertama','Record first dividend')+'</button></div>');
 
     yr.sort(function(a,b){ return String(b.p.tanggal).localeCompare(String(a.p.tanggal)) || (b.i-a.i); });
     var html = yr.map(function(r){
@@ -33573,6 +33658,73 @@ html body .inv-kv{align-items:start !important;}
 html body .inv-kv .k{padding-top:1px;}
 html body .inv-kv .v:has(.maps-chip){flex-direction:column !important; align-items:flex-start !important; flex-wrap:nowrap !important; gap:6px !important;}
 html body .inv-kv .v .maps-chip{margin-left:0 !important;}
+</style>
+<style id="tk-polish-2">
+/* ===== Poles tampilan: Dividen Saham & Detail Akun (gaya datar, aman gelap/terang). Hapus blok ini untuk membatalkan. ===== */
+html #view-dividen#view-dividen#view-dividen#view-dividen .dv-sum{background:color-mix(in srgb,#12B886 9%,var(--surface)) !important; border:1px solid color-mix(in srgb,#12B886 38%,transparent) !important; box-shadow:none !important; padding:18px 16px 16px !important;}
+html #view-dividen#view-dividen#view-dividen#view-dividen .dv-sum > .dv-lbl{font-size:11px; letter-spacing:.08em; font-weight:800;}
+html #view-dividen#view-dividen#view-dividen#view-dividen .dv-sum .dv-big{font-size:36px; line-height:1.1; margin:4px 0 2px; text-shadow:none !important; color:#2FBF71 !important;}
+html #view-dividen#view-dividen#view-dividen#view-dividen .dv-sum .dv-big.dv-zero{color:var(--text-2) !important; opacity:.8;}
+html #view-dividen#view-dividen#view-dividen#view-dividen .dv-sum .dv-stats{gap:8px; margin:14px 0 4px;}
+html #view-dividen#view-dividen#view-dividen#view-dividen .dv-sum .dv-stat{padding:10px 12px; border-radius:14px;}
+html #view-dividen#view-dividen#view-dividen#view-dividen .dv-sum .dv-stat b{font-size:15px; margin-top:3px;}
+html #view-dividen#view-dividen#view-dividen#view-dividen .dv-empty{display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; margin-top:12px; padding:18px 14px 16px; border-radius:16px; border:1.5px dashed color-mix(in srgb,#12B886 45%,transparent); background:color-mix(in srgb,var(--surface) 70%,transparent);}
+html #view-dividen#view-dividen#view-dividen#view-dividen .dv-empty b{font-size:14px; color:var(--text);}
+html #view-dividen#view-dividen#view-dividen#view-dividen .dv-empty span{font-size:12px; line-height:1.5; color:var(--text-2); max-width:260px;}
+html #view-dividen#view-dividen#view-dividen#view-dividen .dv-empty-btn{margin-top:8px; padding:9px 18px; border-radius:99px; border:none; background:#12B886; color:#04241C; font-weight:800; font-size:13px; font-family:inherit; cursor:pointer;}
+html #view-dividen#view-dividen#view-dividen#view-dividen .dv-empty-btn:active{transform:scale(.96);}
+
+html body #view-pengaturan .pf-cover-band{position:absolute; left:0; right:0; top:0; height:60px; pointer-events:none; z-index:0; background:linear-gradient(120deg,color-mix(in srgb,var(--primary) 34%,transparent),color-mix(in srgb,#8B7CF6 28%,transparent));}
+html body #view-pengaturan .pg-l > .card:first-child > *:not(.pf-cover-band){position:relative; z-index:1;}
+html body #view-pengaturan .profile-cover-btns{position:absolute !important; z-index:2 !important;}
+html body #view-pengaturan .profile-row{margin-top:-38px !important;}
+html body #view-pengaturan .profile-avatar{background:var(--surface) !important; box-shadow:0 0 0 4px var(--surface) !important;}
+html body #view-pengaturan .profile-avatar-cam{border-color:var(--surface) !important;}
+html body #view-pengaturan .profile-info .nm{font-size:20px !important; margin-bottom:4px !important;}
+html body #view-pengaturan .profile-cover-btns .pc-btn{background:color-mix(in srgb,var(--surface) 82%,transparent) !important; border:1px solid color-mix(in srgb,var(--text) 14%,transparent) !important;}
+html body #view-pengaturan .guest-card{margin-top:4px; padding:16px; border-radius:18px;}
+html body #view-pengaturan .guest-t{gap:10px; font-size:15px;}
+html body #view-pengaturan .guest-t svg{box-sizing:content-box; width:18px; height:18px; padding:7px; border-radius:11px; background:color-mix(in srgb,var(--primary) 20%,transparent);}
+html body #view-pengaturan .guest-s{font-size:12.5px; line-height:1.55; margin-top:8px;}
+html body #view-pengaturan .guest-card .btn{width:100%; margin:14px 0 0 !important; border-radius:14px; padding:13px 16px; font-size:14px;}
+html[data-theme="light"] body #view-pengaturan .profile-avatar{background:#fff !important; box-shadow:0 0 0 4px #fff !important;}
+html[data-theme="light"] body #view-pengaturan .profile-avatar-cam{border-color:#fff !important;}
+html[data-theme="light"] body #view-pengaturan .profile-cover-btns .pc-btn{background:rgba(255,255,255,.82) !important; color:#171717 !important;}
+html[data-theme="light"] body #view-pengaturan .profile-cover-btns .pc-btn svg{color:#171717 !important; stroke:#171717;}
+</style>
+<style id="tk-kartu-css">
+/* ===== Kartu ATM (default kosong, di-add dulu) ===== */
+.wl-num{position:absolute; left:14px; bottom:12px; z-index:2; font-family:var(--font-mono); font-size:13px; font-weight:700; letter-spacing:.08em; color:#fff; background:rgba(18,18,18,.55); padding:3px 9px; border-radius:99px;}
+.wl-light .wl-cat{color:rgba(0,0,0,.65);} .wl-light .wl-chip{background:rgba(0,0,0,.28);}
+.kt-bar{display:flex; justify-content:flex-end; margin:4px 0 10px;}
+.kt-add{font-weight:800;}
+.kt-emptycard{display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; margin:6px 0 10px; padding:24px 16px 20px; border-radius:18px; border:1.5px dashed var(--line);}
+.kt-ec-ic{font-size:32px; line-height:1;} .kt-emptycard b{font-size:15px; color:var(--text);}
+.kt-emptycard span{font-size:12.5px; line-height:1.55; color:var(--text-2); max-width:290px;}
+.kt-ec-btns{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:10px;}
+.kt-ec-pri,.kt-ec-sec{padding:10px 18px; border-radius:99px; font-weight:800; font-size:13px; font-family:inherit; cursor:pointer;}
+.kt-ec-pri{border:none; background:var(--primary); color:var(--on-primary,#04241C);}
+.kt-ec-sec{border:1px solid var(--line); background:transparent; color:var(--text);}
+.kt-row{display:flex; gap:8px; margin:0 0 8px;}
+.kt-row button{flex:1; padding:8px 10px; border-radius:12px; border:1px solid var(--line); background:transparent; color:var(--text); font-weight:700; font-size:12.5px; font-family:inherit; cursor:pointer;}
+.kt-row button.danger{color:var(--danger,#E5484D); border-color:color-mix(in srgb,var(--danger,#E5484D) 40%,transparent);}
+.kt-ov{position:fixed; inset:0; z-index:99970; display:none; align-items:flex-end; justify-content:center; background:rgba(0,0,0,.55);}
+.kt-ov.show{display:flex;}
+.kt-sheet{width:100%; max-width:480px; max-height:88vh; overflow:auto; background:var(--surface); color:var(--text); border-radius:22px 22px 0 0; padding:16px 16px calc(18px + env(safe-area-inset-bottom,0px)); border:1px solid var(--line);}
+.kt-hd{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;} .kt-hd b{font-size:17px;}
+.kt-x{width:32px; height:32px; border-radius:50%; border:none; background:var(--ghost-bg,rgba(127,127,127,.15)); color:var(--text); cursor:pointer;}
+.kt-step{display:flex; align-items:center; gap:8px; margin:14px 0 8px; font-size:13px; font-weight:800;}
+.kt-step span{width:20px; height:20px; border-radius:50%; background:var(--primary); color:var(--on-primary,#04241C); display:flex; align-items:center; justify-content:center; font-size:11px;}
+.kt-sel,.kt-in{width:100%; padding:12px 14px; border-radius:14px; border:1px solid var(--line); background:var(--card,var(--surface)); color:var(--text); font-size:15px; font-family:inherit;}
+.kt-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;}
+.kt-tile{padding:6px; border-radius:16px; border:2px solid transparent; background:transparent; cursor:pointer; color:var(--text); font-family:inherit; text-align:center;}
+.kt-tile.on{border-color:var(--primary); background:color-mix(in srgb,var(--primary) 10%,transparent);}
+.kt-tile span{display:block; margin-top:6px; font-size:12px; font-weight:700;}
+.kt-tile .wl-card.wl-static{margin:0 auto; max-width:100%; --wlh:40px; cursor:pointer;}
+.kt-tile .wl-bl,.kt-tile .wl-num{display:none;} .kt-tile .wl-nm{font-size:11px; padding:3px 8px;}
+.kt-tile .wl-hd .acc-badge{width:22px; height:22px;}
+.kt-note,.kt-empty{font-size:12px; line-height:1.55; color:var(--text-2); margin:6px 0 14px;}
+.kt-sheet .btn{width:100%; margin-top:6px;}
 </style>
 </body>
 </html>
